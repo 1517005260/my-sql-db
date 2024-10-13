@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <targets>
+      <target name="WSL - Ubuntu" type="wsl" uuid="1688fe15-3024-483b-810c-f4682f248b94">
+        <config>
+          <option name="distributionMsId" value="Ubuntu" />
+          <option name="projectRootOnTarget" value="{exitCode=0, timeout=false, cancelled=false, stdout=/tmp/tmp.IDSTUoKvya&#10;, stderr=}/my-sql-db" />
+        </config>
+        <ContributedStateBase type="RsLanguageRuntime">
+          <config>
+            <option name="cargoPath" value="/home/glk/.cargo/bin/cargo" />
+            <option name="cargoVersion" value="1.81.0 (2dbb1af80 2024-08-20)" />
+            <option name="rustcPath" value="/home/glk/.cargo/bin/rustc" />
+            <option name="rustcVersion" value="error: couldn't read  --version: No such file or directory (os error 2)" />
+          </config>
+        </ContributedStateBase>
+      </target>
+    </targets>
+  </component>
+</project>
