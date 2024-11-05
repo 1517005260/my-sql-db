@@ -508,3 +508,10 @@ mod tests{
     }
 }
 ```
+
+看看部分输出：
+
+```
+tokens1: [Keyword(Create), Keyword(Table), Ident("tbl"), OpenParen, Ident("id1"), Keyword(Int), Keyword(Primary), Keyword(Key), Comma, Ident("id2"), Keyword(Integer), CloseParen, Semicolon]
+tokens2: [Keyword(Create), Keyword(Table), Ident("tbl"), OpenParen, Ident("id1"), Keyword(Int), Keyword(Primary), Keyword(Key), Comma, Ident("id2"), Keyword(Integer), Comma, Ident("c1"), Keyword(Bool), Keyword(Null), Comma, Ident("c2"), Keyword(Boolean), Keyword(Not), Keyword(Null), Comma, Ident("c3"), Keyword(Float), Keyword(Null), Comma, Ident("c4"), Keyword(Double), Comma, Ident("c5"), Keyword(String), Comma, Ident("c6"), Keyword(Text), Comma, Ident("c7"), Keyword(Varchar), Keyword(Default), String("foo"), Comma, Ident("c8"), Keyword(Int), Keyword(Default), Number("100"), Comma, Ident("c9"), Keyword(Integer), CloseParen, Semicolon]
+```

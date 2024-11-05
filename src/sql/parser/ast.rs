@@ -41,7 +41,10 @@ pub enum Sentence{
     },
     Insert{
         table_name: String,           // 目标表名
-        columns: Option<Vec<Column>>,  // 目标列，可以为空
+        columns: Option<Vec<String>>,  // 目标列，可以为空
         values: Vec<Vec<Expression>>,   // 插入数据，是个二维数组
+    },
+    Select{
+        table_name: String,
     }
 }

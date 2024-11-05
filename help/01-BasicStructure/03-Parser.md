@@ -73,9 +73,12 @@ pub enum Sentence{
     },
     Insert{
         table_name: String,           // 目标表名
-        columns: Option<Vec<Column>>,  // 目标列，可以为空
+        columns: Option<Vec<String>>,  // 目标列，可以为空
         values: Vec<Vec<Expression>>,   // 插入数据，是个二维数组
-    }
+    },
+    Select {
+        table_name: String,
+    },
 }
 ```
 
@@ -157,7 +160,7 @@ impl<'a> Parser<'a> {
     // 解析create table语句
     fn parse_ddl_create_table(&mut self) -> Result<ast::Sentence>{
         // 在进入本方法之前，已经由parse_ddl解析了CREATE TABLE，所以这里应该是表名和其他列约束条件
-        let table_name = self.expect_next_is_indent()?;
+        let table_name = self.expect_next_is_ident()?;
 
         // 根据语法，create table table_name，后续接括号，里面是表的列定义
         self.expect_next_token_is(Token::OpenParen)?;
@@ -180,13 +183,13 @@ impl<'a> Parser<'a> {
 
     // 解析column
     fn parse_ddl_column(&mut self) -> Result<ast::Column>{
-        let mut column = Column{
-            name: self.expect_next_is_indent()?,
+        let mut column: Column = Column{
+            name: self.expect_next_is_ident()?,
             datatype: match self.next()? {
-                Token::Keyword(Keyword::Int | Keyword::Integer) => DataType::Integer,
-                Token::Keyword(Keyword::Float | Keyword::Double) => DataType::Float,
-                Token::Keyword(Keyword::Bool | Keyword::Boolean) => DataType::Boolean,
-                Token::Keyword(Keyword::String | Keyword::Text | Keyword::Varchar) => DataType::String,
+                Token::Keyword(Keyword::Int) | Token::Keyword(Keyword::Integer) => DataType::Integer,
+                Token::Keyword(Keyword::Float) | Token::Keyword(Keyword::Double) => DataType::Float,
+                Token::Keyword(Keyword::Bool) | Token::Keyword(Keyword::Boolean) => DataType::Boolean,
+                Token::Keyword(Keyword::String) | Token::Keyword(Keyword::Text) | Token::Keyword(Keyword::Varchar) => DataType::String,
                 token => return Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),
             },
             nullable: None,
@@ -243,11 +246,11 @@ impl<'a> Parser<'a> {
         self.lexer.next().unwrap_or_else(|| Err(Error::Parse("[Parser] Unexpected EOF".to_string())))   // unwrap_or_else：如果返回Some(Token)，返回Token；如果返回None，则执行闭包（报错）
     }
 
-    // 下一个token必须是indent
-    fn expect_next_is_indent(&mut self) -> Result<String>{
+    // 下一个token必须是ident
+    fn expect_next_is_ident(&mut self) -> Result<String>{
         match self.next()? {
             Token::Ident(ident) => Ok(ident),
-            token => Err(Error::Parse(format!("[Parser] Expected Indent, got token: {}",token))),
+            token => Err(Error::Parse(format!("[Parser] Expected Ident, got token: {}",token))),
         }
     }
 
@@ -262,7 +265,7 @@ impl<'a> Parser<'a> {
 
     // 如果下一个token满足条件，则跳转并返回
     fn next_if<F:Fn(&Token) -> bool>(&mut self, condition: F) -> Option<Token>{
-        self.peek().unwrap_or(None).filter(|token| condition(token));
+        self.peek().unwrap_or(None).filter(|token| condition(token))?;
         self.next().ok()  // 因为peek被重写了，返回的是Result，需要用ok解包出option
     }
 
@@ -356,3 +359,189 @@ impl From<ParseFloatError> for Error{
     }
 }
 ```
+
+4. 类似地，我们实现Parser来解析`Insert`和`Select`方法：
+
+这里需要注意，insert into语句提供了一些可选项，详见语法，我们需要特别处理：
+
+```sql
+INSERT INTO table_name [(column1, column2, ...)] -- 列名是可选的
+VALUES (value1, value2, ...);
+```
+
+```rust
+// 分类二：Select语句
+fn parse_select(&mut self) -> Result<ast::Sentence>{
+    // 先只实现select *
+    self.expect_next_token_is(Token::Keyword(Keyword::Select))?;
+    self.expect_next_token_is(Token::Asterisk)?;
+    self.expect_next_token_is(Token::Keyword(Keyword::From))?;
+
+    // 识别完关键字之后为表名
+    let table_name = self.expect_next_is_ident()?;
+    Ok(ast::Sentence::Select {
+        table_name
+    })
+}
+
+// 分类三：Insert语句
+fn parse_insert(&mut self) -> Result<ast::Sentence>{
+    self.expect_next_token_is(Token::Keyword(Keyword::Insert))?;
+    self.expect_next_token_is(Token::Keyword(Keyword::Into))?;
+    let table_name = self.expect_next_is_ident()?;
+
+    // 接下来是可选项，我们需要做出判断：是否给出了指定列名
+    let columns =
+        if self.next_if_is_token(Token::OpenParen).is_some(){
+            let mut cols = Vec::new();
+            loop{
+                cols.push(self.expect_next_is_ident()?.to_string());
+                match self.next()? {
+                    Token::CloseParen => break,
+                    Token::Comma => continue,
+                    token => return Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),
+                }
+            }
+            Some(cols)
+        }else { None };
+
+    // 接下来是必选项，是value的信息：
+    self.expect_next_token_is(Token::Keyword(Keyword::Values))?;
+    // 插入多列：insert into table_a values (1,2,3),(4,5,6)
+    let mut values = Vec::new();
+    loop{
+        self.expect_next_token_is(Token::OpenParen)?;
+        let mut expressions = Vec::new();
+        loop{
+            expressions.push(self.parse_expression()?);
+            match self.next()? {
+                Token::CloseParen => break,
+                Token::Comma => continue,
+                token => return Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),
+            }
+        }
+        values.push(expressions);
+        if self.next_if_is_token(Token::Comma).is_none(){  // 每组数据应该以逗号连接
+            break;
+        }
+    }
+    Ok(ast::Sentence::Insert {
+        table_name,
+        columns,
+        values
+    })
+}
+```
+
+5. 测试代码：
+
+```rust
+#[cfg(test)]
+mod tests{
+    use super::*;
+    use crate::{error::Result};
+
+    #[test]
+    fn test_parser_create_table() -> Result<()> {
+        let sql1 =  "
+            create table tbl1 (
+                a int default 100,
+                b float not null,
+                c varchar null,
+                d bool default true
+            );
+        ";
+        let sentence1 = Parser::new(sql1).parse()?;
+        println!("{:?}", sentence1);
+        let sql2 = "
+        create            table tbl1 (
+            a int default     100,
+            b float not null     ,
+            c varchar      null,
+            d       bool default        true
+        );
+        ";
+        let sentence2 = Parser::new(sql2).parse()?;
+        assert_eq!(sentence1, sentence2);
+
+        let sql3 = "
+            create            table tbl1 (
+            a int default     100,
+            b float not null     ,
+            c varchar      null,
+            d       bool default        true
+        )
+        ";
+
+        let sentence3 = Parser::new(sql3).parse();
+        assert!(sentence3.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_parser_insert() -> Result<()> {
+        let sql1 = "insert into tbl1 values (1, 2, 3, 'a', true);";
+        let sentence1 = Parser::new(sql1).parse()?;
+        assert_eq!(
+            sentence1,
+            ast::Sentence::Insert {
+                table_name: "tbl1".to_string(),
+                columns: None,
+                values: vec![vec![
+                    ast::Consts::Integer(1).into(),
+                    ast::Consts::Integer(2).into(),
+                    ast::Consts::Integer(3).into(),
+                    ast::Consts::String("a".to_string()).into(),
+                    ast::Consts::Boolean(true).into(),
+                ]],
+            }
+        );
+
+        let sql2 = "insert into tbl2 (c1, c2, c3) values (3, 'a', true),(4, 'b', false);";
+        let sentence2 = Parser::new(sql2).parse()?;
+        assert_eq!(
+            sentence2,
+            ast::Sentence::Insert {
+                table_name: "tbl2".to_string(),
+                columns: Some(vec!["c1".to_string(), "c2".to_string(), "c3".to_string()]),
+                values: vec![
+                    vec![
+                        ast::Consts::Integer(3).into(),
+                        ast::Consts::String("a".to_string()).into(),
+                        ast::Consts::Boolean(true).into(),
+                    ],
+                    vec![
+                        ast::Consts::Integer(4).into(),
+                        ast::Consts::String("b".to_string()).into(),
+                        ast::Consts::Boolean(false).into(),
+                    ],
+                ],
+            }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parser_select() -> Result<()> {
+        let sql = "select * from tbl1;";
+        let sentence = Parser::new(sql).parse()?;
+        println!("{:?}", sentence);
+        Ok(())
+    }
+}
+```
+
+看看部分输出：
+
+```
+CreateTable { name: "tbl1", columns: [Column { name: "a", datatype: Integer, nullable: None, default: Some(Consts(Integer(100))) }, Column { name: "b", datatype: Float, nullable: Some(false), default: None }, Column { name: "c", datatype: String, nullable: Some(true), default: None }, Column { name: "d", datatype: Boolean, nullable: None, default: Some(Consts(Boolean(true))) }] }
+```
+
+6. 报错解决：
+
+```rust
+self.peek().unwrap_or(None).filter(|token| condition(token))?;
+```
+
+这行代码中，或者说给个教训，所有的Option和Result解包，都必须加?，否则会无条件进行下一步
