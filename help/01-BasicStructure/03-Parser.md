@@ -1,12 +1,16 @@
+# 解析器Parser的实现
+
+在实现了[Lexer](./02-Lexer.md)之后，我们可以获取用户输入sql中的token，现在对于这些token，我们需要对其进行语法分析，并构建抽象语法树AST。
+
+这里，我们还是先实现`create`,`insert`,`select`的解析
+
+## 代码实现
+
+1. 首先，我们在parser/mod.rs中，定义Parser：
+
+```rust
+use crate::sql::parser::lexer::Lexer;
 use std::iter::Peekable;
-use crate::sql::parser::lexer::{Keyword, Lexer, Token};
-use crate::error::{Result, Error};
-use crate::sql::parser::ast::Column;
-use crate::sql::types::DataType;
-
-mod lexer;  // lexer模块仅parser文件内部可使用
-pub mod ast;
-
 // 定义Parser
 pub struct Parser<'a>{
     lexer: Peekable<Lexer<'a>>  // parser的属性只有lexer，因为parser的数据来源仅是lexer
@@ -19,6 +23,99 @@ impl<'a> Parser<'a> {
         }
     }
 }
+```
+
+2. 接下来，先创建一个ast模块，以防后需用到：
+
+在parser文件夹下新建：ast.rs
+
+```rust
+use crate::sql::types::DataType;
+// 本模块是抽象语法树的定义
+
+
+// 列定义
+#[derive(Debug,PartialEq)]
+pub struct Column{            // 列的各种属性
+    pub name: String,         // 列名
+    pub datatype: DataType,   // 列数据类型
+    pub nullable: Option<bool>, // 列是否为空
+    pub default: Option<Expression> // 列的默认值
+}
+
+#[derive(Debug,PartialEq)]
+pub enum Expression{        // 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
+    Consts(Consts)
+}
+
+#[derive(Debug,PartialEq)]
+pub enum Consts{
+    Null,
+    Boolean(bool),
+    Integer(i64),
+    Float(f64),
+    String(String),
+}
+
+// 定义 Consts -> Expression 的类型转换
+impl From<Consts> for Expression{
+    fn from(c: Consts) -> Self{
+        Self::Consts(c)
+    }
+}
+
+// sql 语句的定义
+#[derive(Debug,PartialEq)]
+pub enum Sentence{
+    CreateTable{
+        name: String,               // 表名
+        columns: Vec<Column>,       // 表的列
+    },
+    Insert{
+        table_name: String,           // 目标表名
+        columns: Option<Vec<Column>>,  // 目标列，可以为空
+        values: Vec<Vec<Expression>>,   // 插入数据，是个二维数组
+    }
+}
+```
+
+抽象语法树的示例：
+
+```
+Statement::CreateTable
+├── name: "users"
+└── columns
+    ├── Column { name: "id", datatype: "Integer" }
+    └── Column { name: "name", datatype: "String" }
+```
+
+此外，这里用到了新的自定义类型DataType，由于这个类型可能被经常用到，所以我们把它放到sql/types/mod.rs里以供使用：
+
+```rust
+#[derive(Debug,PartialEq)]
+pub enum DataType {
+    Boolean,
+    Integer,
+    Float,
+    String,
+}
+```
+
+最后别忘了在sql/mod.rs中添加：
+
+```rust
+pub mod types;
+```
+
+3. 继续实现Parser的解析`Create Table`方法：
+
+```rust
+pub mod ast;
+
+use crate::sql::parser::lexer::{Keyword, Lexer, Token};
+use crate::error::{Result, Error};
+use crate::sql::parser::ast::Column;
+use crate::sql::types::DataType;
 
 // Parser的其他方法
 impl<'a> Parser<'a> {
@@ -179,3 +276,83 @@ impl<'a> Parser<'a> {
         self.next_if(|t| t == &token)
     }
 }
+```
+
+这里，对于token的输出（即format!("{}")）需要先对token实现Display接口的fmt方法，我们将token反转回原始字符即可，keyword同理：
+
+```rust
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Token::Keyword(keyword) => keyword.to_str(),
+            Token::Ident(ident) => ident,
+            Token::String(s) => s,
+            Token::Number(n) => n,
+            Token::OpenParen => "(",
+            Token::CloseParen => ")",
+            Token::Comma => ",",
+            Token::Semicolon => ";",
+            Token::Asterisk => "*",
+            Token::Plus => "+",
+            Token::Minus => "-",
+            Token::Slash => "/",
+        })
+    }
+}
+
+
+impl Keyword {
+    pub fn to_str(&self) -> &str {
+        match self {
+            Keyword::Create => "CREATE",
+            Keyword::Table => "TABLE",
+            Keyword::Int => "INT",
+            Keyword::Integer => "INTEGER",
+            Keyword::Boolean => "BOOLEAN",
+            Keyword::Bool => "BOOL",
+            Keyword::String => "STRING",
+            Keyword::Text => "TEXT",
+            Keyword::Varchar => "VARCHAR",
+            Keyword::Float => "FLOAT",
+            Keyword::Double => "DOUBLE",
+            Keyword::Select => "SELECT",
+            Keyword::From => "FROM",
+            Keyword::Insert => "INSERT",
+            Keyword::Into => "INTO",
+            Keyword::Values => "VALUES",
+            Keyword::True => "TRUE",
+            Keyword::False => "FALSE",
+            Keyword::Default => "DEFAULT",
+            Keyword::Not => "NOT",
+            Keyword::Null => "NULL",
+            Keyword::Primary => "PRIMARY",
+            Keyword::Key => "KEY",
+        }
+    }
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_str())
+    }
+}
+```
+
+此外，在表达式expression的解析中，由于我们是自己实现了一个Result，但是代码里包含了系统自带的解析错误的处理代码，所以对error.rs做出如下新增：
+
+```rust
+use std::num::{ParseFloatError, ParseIntError};
+
+// 兼容系统本身的解析数字报错
+impl From<ParseIntError> for Error{
+    fn from(value: ParseIntError) -> Self {
+        Error::Parse(value.to_string())   // 直接将系统报错信息兼容进我们的报错系统即可
+    }
+}
+
+impl From<ParseFloatError> for Error{
+    fn from(value: ParseFloatError) -> Self {
+        Error::Parse(value.to_string())
+    }
+}
+```
