@@ -1,6 +1,6 @@
 # SQL引擎定义
 
-SQL引擎不同于[之前说的](./01-BasicStructure.md)常见数据库组件，而是作为了一个中间层，串联起了执行器以及底层存储引擎。
+SQL引擎不同于[之前说的](./01-BasicStructure.md)常见数据库组件，而是作为了一个中间层，串联起了执行器以及底层存储引擎。它可以被视为用户和服务器交互的一个中间实例。它在整个 SQL 处理流程中扮演了一个“桥梁”或“中间层”的角色，负责将用户的 SQL 请求解析、执行，并将结果返回给用户。
 
 这里，我们的存储引擎实现最简单的KV存储引擎。
 
@@ -57,7 +57,7 @@ impl<E:Engine> Session<E>{
     pub fn execute(&mut self, sql: &str) -> Result<ResultSet>{
         match Parser::new(sql).parse()?{    // 传进来的sql直接扔给parser解析
             sentence => {         //  获取到了一句sql
-                  let mut transaction = self.engine.begin()?;  // 开启事务
+                  let mut transaction = self.engine.begin()?;  // 开启事务，获取 KVTransaction（E.Transaction）
 
                   // 开始构建plan
                   match Plan::build(sentence).    // 这里获得一个node
@@ -130,7 +130,7 @@ impl<T:Transaction> Executor<T> for CreateTable{
 
 2. SQLEngine实现的接口可以对接不同的底层存储模型，这里我们以KV为例：
 
-新建engine/kv.rs
+新建engine/kv.rs  => KV是engine的一个具体实现
 
 ```rust
 use crate::error::Result;
@@ -231,70 +231,10 @@ impl MvccTransaction {
 ```
 
 ## 流程总结
-执行流程总结如下：
-
-1. **客户端发送SQL语句：**
-    - 客户端通过`Session`向SQL引擎发送SQL语句字符串。
-
-2. **Session接收并处理SQL语句：**
-    - `Session`的`execute`方法接收SQL字符串 `sql`。
-    - `sql`被传递给`Parser`解析。
-
-3. **解析SQL语句：**
-    - `Parser::new(sql).parse()`解析SQL字符串，得到`sentence`（表示解析后的SQL语句结构）。
-
-4. **开始事务：**
-    - 调用`self.engine.begin()`开启一个新的事务，得到`transaction`。
-
-5. **构建执行计划Plan：**
-    - 使用`Plan::build(sentence)`基于解析的语句构建执行计划（Plan）。
-    - 生成的`Plan`包含执行所需的节点信息。
-
-6. **执行计划：**
-    - 调用`Plan`的`execute`方法，传入`transaction`。
-      ```rust
-      Plan::build(sentence).execute(&mut transaction)
-      ```
-    - 在`execute`方法中，将`Plan`节点转换为对应的`Executor`：
-      ```rust
-      <dyn Executor<T>>::build(self.0).execute(transaction)
-      ```
-        - 其中，`self.0`是`Plan`中的节点信息。
-
-7. **构建执行器Executor：**
-    - 根据`Plan`节点的类型，构建相应的`Executor`实例（如`CreateTable`、`Insert`、`Scan`）：
-      ```rust
-      match node {
-          Node::CreateTable { schema } => CreateTable::new(schema),
-          Node::Insert { table_name, columns, values } => Insert::new(table_name, columns, values),
-          Node::Scan { table_name } => Scan::new(table_name),
-      }
-      ```
-
-8. **执行具体操作：**
-    - 调用对应`Executor`的`execute`方法，传入`transaction`。
-      ```rust
-      executor.execute(&mut transaction)
-      ```
-    - `Executor`在执行过程中，通过`Transaction`接口与底层存储交互，进行实际的数据操作（如创建表、插入数据、扫描表等）。
-
-9. **事务提交或回滚：**
-    - **执行成功：**
-        - 如果`Executor`执行成功，调用`transaction.commit()`提交事务。
-    - **执行失败：**
-        - 如果执行过程中发生错误，捕获异常，调用`transaction.rollback()`回滚事务。
-
-10. **返回结果：**
-    - 将执行结果`ResultSet`返回给`Session`，然后返回给客户端。
-
-11. **底层存储交互：**
-    - `KVEngine`实现了`Engine`接口，使用`storage::Mvcc`作为底层存储。
-    - `KVTransaction`实现了`Transaction`接口，封装了`storage::MvccTransaction`，用于实际的数据读写和事务管理。
-
-**整体流程简述：**
 
 客户端发送SQL语句 -> `Session`接收并调用`execute`方法 -> 使用`Parser`解析SQL -> 开启事务`transaction` -> 使用`Plan`构建执行计划 -> `Plan`调用`execute`并构建`Executor` -> `Executor`执行具体操作并与`Transaction`交互 -> 成功则`transaction.commit()`，失败则`transaction.rollback()` -> 返回`ResultSet`给客户端。
 
+即：Engine是抽象接口，KV是其具体实现，实现过程调用了存储部分的Mvcc的实现，通过封装Mvcc实现了数据的存储和事务控制。
 
 可以查看示例图：
 
