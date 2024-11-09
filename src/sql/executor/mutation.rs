@@ -1,3 +1,4 @@
+use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
 use crate::sql::parser::ast::Expression;
 
@@ -13,8 +14,8 @@ impl Insert{
     }
 }
 
-impl Executor for Insert{
-    fn execute(&self) -> crate::error::Result<ResultSet> {
+impl<T:Transaction> Executor<T> for Insert{
+    fn execute(&self,transaction:&mut T) -> crate::error::Result<ResultSet> {
         todo!()
     }
 }

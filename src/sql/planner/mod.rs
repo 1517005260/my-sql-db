@@ -1,3 +1,6 @@
+use crate::sql::engine::Transaction;
+use crate::error::Result;
+use crate::sql::executor::{Executor, ResultSet};
 use crate::sql::parser::ast::{Expression, Sentence};
 use crate::sql::planner::planner::Planner;
 use crate::sql::schema::Table;
@@ -30,6 +33,11 @@ pub struct Plan(pub Node);  // 元素结构体，可以通过 let plan = Plan(no
 impl Plan{
     pub fn build(sentence: Sentence) -> Self{
         Planner::new().build(sentence)
+    }
+
+    // planner与executor交互，plan节点 -> 执行器结构体
+    pub fn execute<T:Transaction>(self, transaction :&mut T) -> Result<ResultSet>{
+        <dyn Executor<T>>::build(self.0).execute(transaction)  // self.0 == node 只有这一个元素
     }
 }
 
