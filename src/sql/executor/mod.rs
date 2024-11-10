@@ -11,7 +11,7 @@ use crate::sql::planner::Node;
 use crate::sql::types::Row;
 
 pub trait Executor<T:Transaction>{
-    fn execute(&self,transaction:&mut T) -> Result<ResultSet>;
+    fn execute(self: Box<Self>,transaction:&mut T) -> Result<ResultSet>;
 }
 
 // 执行结果集的定义

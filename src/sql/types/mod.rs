@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use crate::sql::parser::ast::{Consts, Expression};
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Serialize,Deserialize)]
 pub enum DataType {
     Boolean,
     Integer,
@@ -8,7 +9,7 @@ pub enum DataType {
     String,
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Serialize,Deserialize)]
 pub enum Value {
     Null,
     Boolean(bool),

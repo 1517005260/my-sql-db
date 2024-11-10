@@ -13,7 +13,9 @@ impl CreateTable{
 }
 
 impl<T:Transaction> Executor<T> for CreateTable{
-    fn execute(&self,transaction:&mut T) -> crate::error::Result<ResultSet> {
-        todo!()  // 具体逻辑等待存储引擎构建完成后再写
+    fn execute(self:Box<Self>,transaction:&mut T) -> crate::error::Result<ResultSet> {
+        let table_name = self.schema.name.clone();
+        transaction.create_table(self.schema)?;
+        Ok(ResultSet{table_name})
     }
 }
