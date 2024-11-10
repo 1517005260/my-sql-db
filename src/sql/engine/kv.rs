@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::sql::engine::{Engine, Transaction};
 use crate::sql::schema::Table;
-use crate::sql::types::Row;
+use crate::sql::types::{Row, Value};
 use crate::storage::{self,engine::Engine as storageEngine};  // self 即指 crate::storage
 
 // KV engine 定义
@@ -39,19 +39,43 @@ impl<E:storageEngine> KVTransaction<E>{
 
 impl<E:storageEngine> Transaction for KVTransaction<E> {
     fn commit(&self) -> Result<()> {
-        todo!()
+        Ok(())
     }
 
     fn rollback(&self) -> Result<()> {
-        todo!()
+        Ok(())
     }
 
     fn create_row(&mut self, table: String, row: Row) -> Result<()> {
-        todo!()
+        let table = self.must_get_table(table)?;
+        // 插入行数据的数据类型检查
+        for (i,col) in table.columns.iter().enumerate() {
+            match row[i].get_datatype() {
+                None if col.nullable => continue,
+                None => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" cannot be null",col.name))),
+                Some(datatype) if datatype != col.datatype => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" mismatched data type",col.name))),
+                _ => continue,
+            }
+        }
+        // 存放数据，这里暂时以第一列为主键
+        let key = Key::Row(table.name.clone(), row[0].clone());
+        let bin_code_key = bincode::serialize(&key)?;
+        let value = bincode::serialize(&row)?;
+        self.transaction.set(bin_code_key, value)?;
+        Ok(())
     }
 
     fn scan(&self, table_name: String) -> Result<Vec<Row>> {
-        todo!()
+        // 根据前缀扫描表
+        let prefix = PrefixKey::Row(table_name.clone());
+        let results = self.transaction.prefix_scan(bincode::serialize(&prefix)?)?;
+
+        let mut rows = Vec::new();
+        for res in results {
+            let row: Row = bincode::deserialize(&res.value)?;
+            rows.push(row);
+        }
+        Ok(rows)
     }
 
     fn create_table(&mut self, table: Table) -> Result<()> {
@@ -89,5 +113,44 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
 #[derive(Debug,Serialize,Deserialize)]
 enum Key{
     Table(String),
-    Row(String,String),   // (table_name, primary_key)
+    Row(String,Value),   // (table_name, primary_key)
+}
+
+// 辅助枚举，用于前缀扫描
+#[derive(Debug,Serialize,Deserialize)]
+enum PrefixKey {
+    Table,  // 存的时候Table是第0个枚举，Row是第一个枚举，如果这里没有Table的话，扫描的时候是对不上的，所以要Table进行占位
+    Row(String)
+}
+
+
+// new方法定义
+impl<E:storageEngine> KVEngine<E>{
+    pub fn new(engine:E) -> Self {
+        Self {
+            kv: storage::mvcc::Mvcc::new(engine),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{error::Result, sql::engine::Engine, storage::memory::MemoryEngine};
+
+    use super::KVEngine;
+
+    #[test]
+    fn test_create_table() -> Result<()> {
+        let kvengine = KVEngine::new(MemoryEngine::new());
+        let mut s = kvengine.session()?;
+
+        s.execute("create table t1 (a int, b text default 'vv', c integer default 100);")?;
+        s.execute("insert into t1 values(1, 'a', 1);")?;
+        s.execute("insert into t1 values(2, 'b');")?;
+        s.execute("insert into t1(c, a) values(200, 3);")?;
+
+        s.execute("select * from t1;")?;
+
+        Ok(())
+    }
 }

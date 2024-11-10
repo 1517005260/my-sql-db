@@ -16,6 +16,6 @@ impl<T:Transaction> Executor<T> for CreateTable{
     fn execute(self:Box<Self>,transaction:&mut T) -> crate::error::Result<ResultSet> {
         let table_name = self.schema.name.clone();
         transaction.create_table(self.schema)?;
-        Ok(ResultSet{table_name})
+        Ok(ResultSet::CreateTable{table_name})
     }
 }

@@ -9,7 +9,7 @@ pub enum DataType {
     String,
 }
 
-#[derive(Debug,PartialEq,Serialize,Deserialize)]
+#[derive(Debug,PartialEq,Serialize,Deserialize,Clone)]
 pub enum Value {
     Null,
     Boolean(bool),
@@ -26,6 +26,16 @@ impl Value {
             Expression::Consts(Consts::Integer(int)) => Self::Integer(int),
             Expression::Consts(Consts::Float(float)) => Self::Float(float),
             Expression::Consts(Consts::String(string)) => Self::String(string),
+        }
+    }
+
+    pub fn get_datatype(&self) -> Option<DataType> {
+        match self {
+            Self::Null => None,
+            Self::Boolean(_) => Some(DataType::Boolean),
+            Self::Integer(_) => Some(DataType::Integer),
+            Self::Float(_) => Some(DataType::Float),
+            Self::String(_) => Some(DataType::String),
         }
     }
 }

@@ -1,6 +1,10 @@
+use std::collections::HashMap;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
 use crate::sql::parser::ast::Expression;
+use crate::sql::schema::Table;
+use crate::sql::types::{Row, Value};
+use crate::error::{Error, Result};
 
 pub struct Insert{
     table_name:String,
@@ -15,7 +19,74 @@ impl Insert{
 }
 
 impl<T:Transaction> Executor<T> for Insert{
-    fn execute(&self,transaction:&mut T) -> crate::error::Result<ResultSet> {
-        todo!()
+    fn execute(self:Box<Self>,transaction:&mut T) -> Result<ResultSet> {
+        // 插入表之前，表必须是存在的
+        let table = transaction.must_get_table(self.table_name.clone())?;
+
+        // ResultSet成功结果返回插入行数
+        let mut count = 0;
+
+        // 现在手上表的数据类型是values:Vec<Vec<Expression>>,我们需要进行一些操作
+        for exprs in self.values{
+            // 1. 先将 Vec<Expression> 转换为 Row，即Vec<Value>
+            let row = exprs.into_iter().map(|e|Value::from_expression_to_value(e))
+                .collect::<Vec<Value>>();
+
+            // 2. 可选项：是否指定了插入的列
+            let insert_row = if self.columns.is_empty(){
+                // 未指定插入列
+                complete_row(&table,&row)?
+            }else{
+                // 指定插入列
+                modify_row(&table,&self.columns,&row)?
+            };
+            transaction.create_row(self.table_name.clone(),insert_row)?;
+            count += 1;
+        }
+        Ok(ResultSet::Insert {count})
     }
+}
+
+// 辅助判断方法
+// 1. 补全列，即列对齐
+fn complete_row(table: &Table, row: &Row) -> Result<Row>{
+    let mut res = row.clone();
+    for column in table.columns.iter().skip(row.len()){  // 跳过已经给定数据的列
+        if let Some(default) = &column.default{
+            // 有默认值
+            res.push(default.clone());
+        }else{
+            // 建表时没有默认值但是insert时又没给数据
+            return Err(Error::Internal(format!("[Insert Table] Column \" {} \" has no default value", column.name)));
+        }
+    }
+    Ok(res)
+}
+
+// 2. 调整列信息并补全
+fn modify_row(table: &Table, columns: &Vec<String>, values: &Row) -> Result<Row>{
+    // 首先先判断给的列数和values的数量是否是一致的：
+    if columns.len() != values.len(){
+        return Err(Error::Internal("[Insert Table] Mismatch num of columns and values".to_string()));
+    }
+
+    // 有可能顺序是乱的，但是返回时顺序不能乱，这里考虑使用hash
+    let mut inputs = HashMap::new();
+    for (i,col_name) in columns.iter().enumerate(){  // enumerate()用于为迭代中的每个元素附加一个索引值
+        inputs.insert(col_name,values[i].clone());
+    }
+
+    // 现在inputs就是顺序正常的插入行，之后和complete_row()思路差不多了
+    let mut res = Vec::new();
+    for col in table.columns.iter(){
+        if let Some(value) = inputs.get(&col.name){
+            res.push(value.clone());
+        }else if let Some(default) = &col.default{
+            res.push(default.clone());
+        }else {
+            return Err(Error::Internal(format!("[Insert Table] Column \" {} \" has no default value", col.name)));
+        }
+    }
+
+    Ok(res)
 }

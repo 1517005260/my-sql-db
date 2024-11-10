@@ -51,11 +51,11 @@ impl<E:Engine> MvccTransaction<E> {
     }
 
     pub fn prefix_scan(&self, prefix:Vec<u8>) -> Result<Vec<ScanResult>>{
-        let mut engine = self.engine.lock()?;
-        let mut iter = engine.prefix_scan(prefix);
+        let mut eng = self.engine.lock()?;
+        let mut iter = eng.prefix_scan(prefix);
         let mut results = Vec::new();
-        while let Some((key,value)) = iter.next(){
-            results.push(ScanResult { key,value });
+        while let Some((key, value)) = iter.next().transpose()? {
+            results.push(ScanResult { key, value });
         }
         Ok(results)
     }

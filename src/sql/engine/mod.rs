@@ -1,6 +1,6 @@
 mod kv;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::sql::executor::ResultSet;
 use crate::sql::parser::Parser;
 use crate::sql::planner::Plan;
@@ -37,6 +37,12 @@ pub trait Transaction {
 
     // 获取表的信息
     fn get_table(&self, table_name:String)-> Result<Option<Table>>;
+
+    // 必须获取表
+    fn must_get_table(&self, table_name:String)-> Result<Table>{
+        self.get_table(table_name.clone())?.  // ok_or : Option -> Result
+            ok_or(Error::Internal(format!("[Get Table] Table \" {} \" does not exist",table_name)))
+    }
 }
 
 pub struct Session<E:Engine>{

@@ -74,11 +74,11 @@ impl<E:Engine> MvccTransaction<E> {
     }
 
     pub fn prefix_scan(&self, prefix:Vec<u8>) -> Result<Vec<ScanResult>>{
-        let mut engine = self.engine.lock()?;
-        let mut iter = engine.prefix_scan(prefix);
+        let mut eng = self.engine.lock()?;
+        let mut iter = eng.prefix_scan(prefix);
         let mut results = Vec::new();
-        while let Some((key,value)) = iter.next(){
-            results.push(ScanResult { key,value });
+        while let Some((key, value)) = iter.next().transpose()? {
+            results.push(ScanResult { key, value });
         }
         Ok(results)
     }
@@ -160,17 +160,194 @@ impl<T:Transaction> Executor<T> for CreateTable{
     fn execute(self:Box<Self>,transaction:&mut T) -> crate::error::Result<ResultSet> {
         let table_name = self.schema.name.clone();
         transaction.create_table(self.schema)?;
-        Ok(ResultSet{table_name})
+        Ok(ResultSet::CreateTable{table_name})
+    }
+}
+```
+
+这里在engine/mod.rs中新增必须获取表的方法，方便后续不用做判断了：
+
+```rust
+pub trait Transaction {
+    // 必须获取表
+    fn must_get_table(&self, table_name:String)-> Result<Table>{
+        self.get_table(table_name.clone())?.  // ok_or : Option -> Result
+            ok_or(Error::Internal(format!("[Get Table] Table \" {} \" does not exist",table_name)))
+    }
+}
+```
+
+mutation.rs: 这里Insert的判断比较复杂，因为有很多可选条件
+
+```rust
+impl<T:Transaction> Executor<T> for Insert{
+    fn execute(self:Box<Self>,transaction:&mut T) -> Result<ResultSet> {
+        // 插入表之前，表必须是存在的
+        let table = transaction.must_get_table(self.table_name.clone())?;
+
+        // ResultSet成功结果返回插入行数
+        let mut count = 0;
+
+        // 现在手上表的数据类型是values:Vec<Vec<Expression>>,我们需要进行一些操作
+        for exprs in self.values{
+            // 1. 先将 Vec<Expression> 转换为 Row，即Vec<Value>
+            let row = exprs.into_iter().map(|e|Value::from_expression_to_value(e))
+                .collect::<Vec<Value>>();
+
+            // 2. 可选项：是否指定了插入的列
+            let insert_row = if self.columns.is_empty(){
+                // 未指定插入列
+                complete_row(&table,&row)?
+            }else{
+                // 指定插入列
+                modify_row(&table,&self.columns,&row)?
+            };
+            transaction.create_row(self.table_name.clone(),insert_row)?;
+            count += 1;
+        }
+        Ok(ResultSet::Insert {count})
+    }
+}
+
+// 辅助判断方法
+// 1. 补全列，即列对齐
+fn complete_row(table: &Table, row: &Row) -> Result<Row>{
+    let mut res = row.clone();
+    for column in table.columns.iter().skip(row.len()){  // 跳过已经给定数据的列
+        if let Some(default) = &column.default{
+            // 有默认值
+            res.push(default.clone());
+        }else{
+            // 建表时没有默认值但是insert时又没给数据
+            return Err(Error::Internal(format!("[Insert Table] Column \" {} \" has no default value", column.name)));
+        }
+    }
+    Ok(res)
+}
+
+// 2. 调整列信息并补全
+fn modify_row(table: &Table, columns: &Vec<String>, values: &Row) -> Result<Row>{
+    // 首先先判断给的列数和values的数量是否是一致的：
+    if columns.len() != values.len(){
+        return Err(Error::Internal("[Insert Table] Mismatch num of columns and values".to_string()));
+    }
+
+    // 有可能顺序是乱的，但是返回时顺序不能乱，这里考虑使用hash
+    let mut inputs = HashMap::new();
+    for (i,col_name) in columns.iter().enumerate(){  // enumerate()用于为迭代中的每个元素附加一个索引值
+        inputs.insert(col_name,values[i].clone());
+    }
+
+    // 现在inputs就是顺序正常的插入行，之后和complete_row()思路差不多了
+    let mut res = Vec::new();
+    for col in table.columns.iter(){
+        if let Some(value) = inputs.get(&col.name){
+            res.push(value.clone());
+        }else if let Some(default) = &col.default{
+            res.push(default.clone());
+        }else {
+            return Err(Error::Internal(format!("[Insert Table] Column \" {} \" has no default value", col.name)));
+        }
+    }
+
+    Ok(res)
+}
+```
+
+这里，形象解释一下两个辅助方法：
+
+```
+1. 补全列
+
+现在有表tbl，sql语句是： insert into tbl values(1,2,3);，即未指定D列的数据，也未指定插入什么列
+    列名     A        B       C       D
+行号  1      1        2       3     default
+
+2. 调整列信息
+现在有表tbl，sql语句是： insert into tbl(D,C) values(1,2);，即指定了，但没指定全列，顺序也不一定
+    列名     A        B       C       D
+行号  1    default  default   2       1
+```
+
+query.rs:
+
+```rust
+impl<T:Transaction> Executor<T> for Scan{
+    fn execute(self:Box<Self>,trasaction:&mut T) -> crate::error::Result<ResultSet> {
+        let table = trasaction.must_get_table(self.table_name.clone())?;
+        let rows = trasaction.scan(self.table_name.clone())?;
+        Ok(
+            ResultSet::Scan{
+                columns: table.columns.into_iter().map(|c| c.name.clone()).collect(),
+                rows,
+            }
+        )
     }
 }
 ```
 
 4. 在engine/kv.rs中进行具体`create_table`,`create_row`,`scan`的实现
 
+为了校验插入行的所有数据类型和列类型是否匹配，我们在types/mod.rs新增：
+
+```rust
+impl Value {
+    pub fn get_datatype(&self) -> Option<DataType> {
+        match self {
+            Self::Null => None,
+            Self::Boolean(_) => Some(DataType::Boolean),
+            Self::Integer(_) => Some(DataType::Integer),
+            Self::Float(_) => Some(DataType::Float),
+            Self::String(_) => Some(DataType::String),
+        }
+    }
+}
+```
+
 ```rust
 use serde::{Deserialize, Serialize};
 
 impl<E:storageEngine> Transaction for KVTransaction<E> {
+    fn commit(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn rollback(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn create_row(&mut self, table: String, row: Row) -> Result<()> {
+        let table = self.must_get_table(table)?;
+        // 插入行数据的数据类型检查
+        for (i,col) in table.columns.iter().enumerate() {
+            match row[i].get_datatype() {
+                None if col.nullable => continue,
+                None => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" cannot be null",col.name))),
+                Some(datatype) if datatype != col.datatype => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" mismatched data type",col.name))),
+                _ => continue,
+            }
+        }
+        // 存放数据，这里暂时以第一列为主键
+        let key = Key::Row(table.name.clone(), row[0].clone());
+        let bin_code_key = bincode::serialize(&key)?;
+        let value = bincode::serialize(&row)?;
+        self.transaction.set(bin_code_key, value)?;
+        Ok(())
+    }
+
+    fn scan(&self, table_name: String) -> Result<Vec<Row>> {
+        // 根据前缀扫描表
+        let prefix = PrefixKey::Row(table_name.clone());
+        let results = self.transaction.prefix_scan(bincode::serialize(&prefix)?)?;
+
+        let mut rows = Vec::new();
+        for res in results {
+            let row: Row = bincode::deserialize(&res.value)?;
+            rows.push(row);
+        }
+        Ok(rows)
+    }
+    
     fn create_table(&mut self, table: Table) -> Result<()> {
         // 1. 判断表是否存在
         if self.get_table(table.name.clone())?.is_some() {
@@ -206,7 +383,14 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
 #[derive(Debug,Serialize,Deserialize)]
 enum Key{
     Table(String),
-    Row(String,String),   // (table_name, primary_key)
+    Row(String,Value),   // (table_name, primary_key)
+}
+
+// 辅助枚举，用于前缀扫描
+#[derive(Debug,Serialize,Deserialize)]
+enum PrefixKey {
+    Table, // 存的时候Table是第0个枚举，Row是第一个枚举，如果这里没有Table的话，扫描的时候是对不上的，所以要Table进行占位
+    Row(String)
 }
 ```
 
@@ -250,6 +434,41 @@ pub struct Column{}
 #[derive(Debug,PartialEq,Serialize,Deserialize)]
 pub enum DataType {}
 
-#[derive(Debug,PartialEq,Serialize,Deserialize)]
+#[derive(Debug,PartialEq,Serialize,Deserialize,Clone)]
 pub enum Value {}
+```
+
+5. 在kv.rs中写点测试：
+
+```rust
+// new方法定义
+impl<E:storageEngine> KVEngine<E>{
+    pub fn new(engine:E) -> Self {
+        Self {
+            kv: storage::mvcc::Mvcc::new(engine),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{error::Result, sql::engine::Engine, storage::memory::MemoryEngine};
+
+    use super::KVEngine;
+
+    #[test]
+    fn test_create_table() -> Result<()> {
+        let kvengine = KVEngine::new(MemoryEngine::new());
+        let mut s = kvengine.session()?;
+
+        s.execute("create table t1 (a int, b text default 'vv', c integer default 100);")?;
+        s.execute("insert into t1 values(1, 'a', 1);")?;
+        s.execute("insert into t1 values(2, 'b');")?;
+        s.execute("insert into t1(c, a) values(200, 3);")?;
+
+        s.execute("select * from t1;")?;
+
+        Ok(())
+    }
+}
 ```
