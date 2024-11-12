@@ -40,3 +40,10 @@ impl From<Box<ErrorKind>> for Error{
         Error::Internal(value.to_string())
     }
 }
+
+// 文件相关错误
+impl From<std::io::Error> for Error{
+    fn from(value: std::io::Error) -> Self {
+        Error::Internal(value.to_string())
+    }
+}
