@@ -45,6 +45,8 @@ mod tests {
     use super::Engine;
     use crate::{error::Result, storage::memory::MemoryEngine};
     use std::ops::Bound;
+    use std::path::PathBuf;
+    use crate::storage::disk::DiskEngine;
 
     // 测试点读的情况
     fn test_point_opt(mut eng: impl Engine) -> Result<()> {
@@ -132,6 +134,19 @@ mod tests {
         test_point_opt(MemoryEngine::new())?;
         test_scan(MemoryEngine::new())?;
         test_scan_prefix(MemoryEngine::new())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_disk() -> Result<()> {
+        test_point_opt(DiskEngine::new(PathBuf::from("./tmp/sqldb1/db.log"))?)?;
+        std::fs::remove_dir_all(PathBuf::from("./tmp/sqldb1"))?;  // 测试完成后删除
+
+        test_scan(DiskEngine::new(PathBuf::from("./tmp/sqldb2/db.log"))?)?;
+        std::fs::remove_dir_all(PathBuf::from("./tmp/sqldb2"))?;
+
+        test_scan_prefix(DiskEngine::new(PathBuf::from("./tmp/sqldb3/db.log"))?)?;
+        std::fs::remove_dir_all(PathBuf::from("./tmp/sqldb3"))?;
         Ok(())
     }
 }

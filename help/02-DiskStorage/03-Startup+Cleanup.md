@@ -141,7 +141,7 @@ impl DiskEngine {
         let mut compact_key_dir = KeyDir::new();
         for(key, (offset, value_len)) in self.key_dir.iter() {
             let value = self.log.read_value(*offset, *value_len)?;
-            let (compact_offset, compact_size) = self.log.write_log(&key, Some(&value))?;
+            let (compact_offset, compact_size) = compact_log.write_log(&key, Some(&value))?;
             compact_key_dir.insert(key.clone(), (
                 compact_offset + compact_size as u64 - *value_len as u64, *value_len as u32
             ));
