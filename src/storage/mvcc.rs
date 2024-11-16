@@ -71,7 +71,8 @@ impl MvccKey{
 #[derive(Clone, Serialize, Deserialize)]
 pub enum MvccKeyPrefix{  // MvccKey的前缀，用于扫描活跃事务
     NextVersion,   // 版本号前缀
-    ActiveTransactions // 活跃事务前缀
+    ActiveTransactions, // 活跃事务前缀
+    Write(Version),    // 事务写信息前缀
 }
 impl MvccKeyPrefix {
     // 编码为二进制
@@ -123,11 +124,47 @@ impl<E:Engine> MvccTransaction<E> {
     }
 
     pub fn commit(&self) -> Result<()> {
-        Ok(())
+        // 1. 获取存储引擎
+        let mut engine = self.engine.lock()?;
+        // 2. 获取事务写信息并删除
+        let mut keys_to_be_deleted = Vec::new();
+        let mut iter = engine.prefix_scan(MvccKeyPrefix::Write(self.state.version).encode());
+        while let Some((key, _)) = iter.next().transpose()?{
+            keys_to_be_deleted.push(key);
+        }
+        drop(iter);  // 这里后续还要用到对engine的可变引用，而一次生命周期内仅能有一次引用，所以这里手动drop掉iter，停止对engine的可变引用
+        for key in keys_to_be_deleted {
+            engine.delete(key)?;
+        }
+        // 3. 从活跃列表删除本事务
+        engine.delete(MvccKey::ActiveTransactions(self.state.version).encode())
     }
 
     pub fn rollback(&self) -> Result<()> {
-        Ok(())
+        // 1. 获取存储引擎
+        let mut engine = self.engine.lock()?;
+        // 2. 获取事务写信息并删除
+        let mut keys_to_be_deleted = Vec::new();
+        let mut iter = engine.prefix_scan(MvccKeyPrefix::Write(self.state.version).encode());
+        while let Some((key, _)) = iter.next().transpose()?{
+            // 这里比commit多一步删除写入log的真实数据
+            match MvccKey::decode(&key)? {
+                MvccKey::Write(_, raw_key) => {  // 这里找到的是不含版本信息的key
+                    // 构造带版本信息的key
+                    keys_to_be_deleted.push(MvccKey::Version(raw_key, self.state.version).encode());
+                },
+                _ => {
+                    Err(Error::Internal(format!("[Transaction rollback] Unexpected key: {:?}", String::from_utf8(&key))))
+                }
+            }
+            keys_to_be_deleted.push(key);
+        }
+        drop(iter);
+        for key in keys_to_be_deleted {
+            engine.delete(key)?;
+        }
+        // 3. 从活跃列表删除本事务
+        engine.delete(MvccKey::ActiveTransactions(self.state.version).encode())
     }
 
     pub fn set(&mut self, key:Vec<u8>, value:Vec<u8>) -> Result<()> {
@@ -156,10 +193,7 @@ impl<E:Engine> MvccTransaction<E> {
                     }
                 },
                 _ => {
-                    Err(Error::Internal(format!(
-                        "[Transaction Update] Unexpected key: {:?}",
-                        String::from_utf8(&key)
-                    )))
+                    Err(Error::Internal(format!("[Transaction Update] Unexpected key: {:?}", String::from_utf8(&key))))
                 }
             }
         }?;
@@ -172,8 +206,25 @@ impl<E:Engine> MvccTransaction<E> {
     }
 
     pub fn get(&self, key:Vec<u8>) -> Result<Option<Vec<u8>>> {
+        // 1. 获取存储引擎
         let mut engine = self.engine.lock()?;
-        engine.get(key)
+        // 2. 判断数据是否符合条件
+        let from = MvccKey::Version(key.clone(), 0).encode();
+        let to = MvccKey::Version(key.clone(), self.state.version).encode();
+        let mut iter = engine.scan(from..=to).rev(); // rev 反转
+        while let Some((key,value)) =  iter.next().transpose()?{
+            match MvccKey::decode(&key)? {
+                MvccKey::Version(_, version) => {
+                    if self.state.is_visible(version) {
+                        Ok(bincode::deserialize(&value)?)
+                    }
+                },
+                _ => {
+                    Err(Error::Internal(format!("[Transaction get] Unexpected key: {:?}", String::from_utf8(&key))))
+                }
+            }
+        }
+        Ok(None)  // 未找到数据
     }
 
     pub fn prefix_scan(&self, prefix:Vec<u8>) -> Result<Vec<ScanResult>>{
