@@ -12,6 +12,7 @@ pub type Result<T> = std::result::Result<T,Error>;
 pub enum Error{
     Parse(String), // 在解析器阶段报错，内容为String的错误
     Internal(String),   // 在数据库内部运行时的报错
+    WriteConflict(String),   // 事务写冲突
 }
 
 // 兼容系统本身的解析数字报错

@@ -38,10 +38,22 @@ pub struct TransactionState{
     pub active_version: HashSet<Version>,  // 活跃事务对应的版本号
 }
 
+impl TransactionState{
+    fn is_visible(&self, version: Version) -> bool {
+        if self.active_version.contains(&version) {
+            false
+        }else{
+            version <= self.version
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum MvccKey{  // 和数据key类型区分
     NextVersion,   // 版本号
-    ActiveTransactions(Version)  // 活跃事务，附有版本号
+    ActiveTransactions(Version),  // 活跃事务版本号
+    Write(Version, Vec<u8>),     // 事务写入了哪些key
+    Version(Vec<u8>, Version),  // (key, 所属version)
 }
 
 impl MvccKey{
@@ -119,8 +131,44 @@ impl<E:Engine> MvccTransaction<E> {
     }
 
     pub fn set(&mut self, key:Vec<u8>, value:Vec<u8>) -> Result<()> {
-        let mut engine = self.engine.lock()?;   // lock 获取 锁，进行独占
-        engine.set(key, value)
+        self.update(key, Some(value))
+    }
+
+    pub fn delete(&mut self, key: Vec<u8>) -> Result<()> {
+        self.update(key, None)
+    }
+
+    // set-delete 通用逻辑
+    fn update(&self, key:Vec<u8>, value:Option<Vec<u8>>) -> Result<()> {  // 删除时value置空即可
+        // 1. 获取存储引擎
+        let mut engine= self.engine.lock()?;
+        // 2. 检测是否冲突
+        let from = MvccKey::Version(key.clone(), self.state.active_version.iter().min().copied().unwrap_or(self.state.version+1)).encode();
+        // from 是最小的活跃版本，若活跃版本为空则置为 本事务版本+1
+        let to = MvccKey::Version(key.clone(), u64::MAX).encode();
+        // to 涵盖最大可能版本
+        if let Some((key, _)) = engine.scan(from..=to).last().transpose()?{  // 取得key的最新版本
+            match MvccKey::decode(&key)? {
+                MvccKey::Version(_, version) => {
+                    // 要修改的key的version是否对本事务可见
+                    if !self.state.is_visible(version) {
+                        Err(Error::WriteConflict)
+                    }
+                },
+                _ => {
+                    Err(Error::Internal(format!(
+                        "[Transaction Update] Unexpected key: {:?}",
+                        String::from_utf8(&key)
+                    )))
+                }
+            }
+        }?;
+        // 3. 不冲突，写入数据
+        // 3.1 记录本version写入了哪些key，用于回滚数据
+        engine.set(MvccKey::Write(self.state.version, key.clone()), vec![])?;
+        // 3.2 写入实际的key-value数据
+        engine.set(MvccKey::Version(key.clone(), self.state.version).encode(), bincode::serialize(&value)?)?;
+        Ok(())
     }
 
     pub fn get(&self, key:Vec<u8>) -> Result<Option<Vec<u8>>> {

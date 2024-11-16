@@ -163,3 +163,111 @@ ActiveTransactions - 0x1001, 0x1002, 0x1003
 
 ### 代码实现
 
+继续在mvcc.rs中：
+
+```rust
+impl TransactionState{
+    fn is_visible(&self, version: Version) -> bool {
+        if self.active_version.contains(&version) {
+            false
+        }else{
+            version <= self.version
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum MvccKey{  // 和数据key类型区分
+  NextVersion,   // 版本号
+  ActiveTransactions(Version),  // 活跃事务版本号
+  Write(Version, Vec<u8>),     // 事务写入了哪些key
+  Version(Vec<u8>, Version),  // (key, 所属version)
+}
+
+
+impl<E:Engine> MvccTransaction<E> {
+  pub fn set(&mut self, key:Vec<u8>, value:Vec<u8>) -> Result<()> {
+    self.update(key, Some(value))
+  }
+
+  pub fn delete(&mut self, key: Vec<u8>) -> Result<()> {
+    self.update(key, None)
+  }
+
+  // set-delete 通用逻辑
+  fn update(&self, key:Vec<u8>, value:Option<Vec<u8>>) -> Result<()> {  // 删除时value置空即可
+    // 1. 获取存储引擎
+    let mut engine= self.engine.lock()?;
+    // 2. 检测是否冲突
+    let from = MvccKey::Version(key.clone(), self.state.active_version.iter().min().copied().unwrap_or(self.state.version+1)).encode();
+    // from 是最小的活跃版本，若活跃版本为空则置为 本事务版本+1
+    let to = MvccKey::Version(key.clone(), u64::MAX).encode();
+    // to 涵盖最大可能版本
+    if let Some((key, _)) = engine.scan(from..=to).last().transpose()?{  // 对于我要修改的key，我需要从from-to找到它的最新版本号
+      match MvccKey::decode(&key)? {
+        MvccKey::Version(_, version) => {
+          // 要修改的key的version是否对本事务可见
+          if !self.state.is_visible(version) {
+            Err(Error::WriteConflict)
+          }
+        },
+        _ => {
+          Err(Error::Internal(format!(
+            "[Transaction Update] Unexpected key: {:?}",
+            String::from_utf8(&key)
+          )))
+        }
+      }
+    }?;
+    // 3. 不冲突，写入数据
+    // 3.1 记录本version写入了哪些key，用于回滚数据
+    engine.set(MvccKey::Write(self.state.version, key.clone()), vec![])?;
+    // 3.2 写入实际的key-value数据
+    engine.set(MvccKey::Version(key.clone(), self.state.version).encode(), bincode::serialize(&value)?)?;
+    Ok(())
+  }
+}
+```
+
+这里需要注意：我们新编码了：Version(Vec<u8>, Version),即：`0xKey101`字样，但是扫描时有如下逻辑：
+
+```
+现在活跃事务版本号： 3 4 5
+当前事务版本号：6
+事务345修改了： key1-3 key2-4 key3-5
+我们仅需要找出比3更旧的事务，只有这类事务才对6可见。3-5正在修改，所以6不可见，比6大的事务也不可见。
+```
+
+这里还涉及到了新的自定义错误，在error.rs中新增：
+
+```rust
+// 自定义错误类型
+#[derive(Debug, Clone, PartialEq)]
+pub enum Error{
+    Parse(String), // 在解析器阶段报错，内容为String的错误
+    Internal(String),   // 在数据库内部运行时的报错
+    WriteConflict(String),   // 事务写冲突
+}
+```
+
+## 磁盘存储了什么？
+
+总结一下目前存储的数据：
+
+**日志记录（来自 DiskEngine）**:
+- 头部（key_len、value_len）。
+- 数据（key 和 Option<value>）。
+
+**事务元数据（来自 MVCC 层）**:
+- 下一个版本号:
+  - 键：MvccKey::NextVersion.encode()
+  - 值：序列化的 Version (u64)。
+- 活跃事务:
+  - 键：MvccKey::ActiveTransactions(version).encode() 表示每个活跃事务。
+  - 值：空（vec![]）。
+- 事务写操作:
+  - 键：MvccKey::Write(version, key).encode() 表示每个事务中写入的键。
+  - 值：空（vec![]）。
+- 版本化键值对:
+  - 键：MvccKey::Version(key, version).encode()
+  - 值：序列化的 Option<Vec<u8>>，代表值或删除标记。
