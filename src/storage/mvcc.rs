@@ -52,8 +52,8 @@ impl TransactionState{
 pub enum MvccKey{  // 和数据key类型区分
     NextVersion,   // 版本号
     ActiveTransactions(Version),  // 活跃事务版本号
-    Write(Version, Vec<u8>),     // 事务写入了哪些key
-    Version(Vec<u8>, Version),  // (key, 所属version)
+    Write(Version,  #[serde(with = "serde_bytes")]Vec<u8>),     // 事务写入了哪些key
+    Version( #[serde(with = "serde_bytes")]Vec<u8>, Version),  // (key, 所属version)
 }
 
 impl MvccKey{
@@ -73,6 +73,7 @@ pub enum MvccKeyPrefix{  // MvccKey的前缀，用于扫描活跃事务
     NextVersion,   // 版本号前缀
     ActiveTransactions, // 活跃事务前缀
     Write(Version),    // 事务写信息前缀
+    Version(#[serde(with = "serde_bytes")] Vec<u8>),
 }
 impl MvccKeyPrefix {
     // 编码为二进制
