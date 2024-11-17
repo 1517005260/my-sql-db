@@ -48,7 +48,7 @@ impl TransactionState{
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize,PartialEq,Debug)]
 pub enum MvccKey{  // 和数据key类型区分
     NextVersion,   // 版本号
     ActiveTransactions(Version),  // 活跃事务版本号

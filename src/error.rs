@@ -1,6 +1,7 @@
 // 自定义Result返回的错误类型
 // 对标准的Result进行重写即可
 
+use std::array::TryFromSliceError;
 use std::fmt;
 use std::fmt::Display;
 use std::num::{ParseFloatError, ParseIntError};
@@ -48,6 +49,13 @@ impl From<Box<ErrorKind>> for Error{
 // 文件相关错误
 impl From<std::io::Error> for Error{
     fn from(value: std::io::Error) -> Self {
+        Error::Internal(value.to_string())
+    }
+}
+
+// &[u8] -> Vec<u8> 相关错误
+impl From<TryFromSliceError> for Error {
+    fn from(value: TryFromSliceError) -> Self {
         Error::Internal(value.to_string())
     }
 }

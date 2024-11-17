@@ -412,14 +412,14 @@ impl<'a> ser::SerializeSeq for &'a mut Serializer {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_element<T>(&mut self, value: &T) -> std::result::Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
         T: ?Sized + Serialize
     {
         value.serialize(&mut **self)  // 对seq里的值单独编码即可
     }
 
-    fn end(self) -> std::result::Result<Self::Ok, Self::Error> {
+    fn end(self) -> Result<()> {
         Ok(())
     }
 }
