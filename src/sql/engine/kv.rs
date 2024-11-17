@@ -39,11 +39,11 @@ impl<E:storageEngine> KVTransaction<E>{
 
 impl<E:storageEngine> Transaction for KVTransaction<E> {
     fn commit(&self) -> Result<()> {
-        Ok(())
+        self.transaction.commit()
     }
 
     fn rollback(&self) -> Result<()> {
-        Ok(())
+        self.transaction.rollback()
     }
 
     fn create_row(&mut self, table: String, row: Row) -> Result<()> {

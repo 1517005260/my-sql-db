@@ -126,3 +126,19 @@ impl<E:Engine> MvccTransaction<E> {
 - 脏读：其它正在运行中的事务修改之后，对当前事务不可见，所以没有脏读问题。
 - 不可重复读：一个事务提交之后，其修改仍然对当前事务不可见，所以可重复读。
 - 幻读：根据版本号判断机制，一个事务就算修改数据且提交，只要其版本号比当前事务大，那么其修改不可见，所以没有幻读问题。
+
+## 修改上层代码
+
+sql-engine调用了底层的事务实现，所以这里需要在sql/engine/kv.rs中修改：
+
+```rust
+impl<E:storageEngine> Transaction for KVTransaction<E> {
+    fn commit(&self) -> Result<()> {
+        self.transaction.commit()
+    }
+
+    fn rollback(&self) -> Result<()> {
+        self.transaction.rollback()
+    }
+}
+```

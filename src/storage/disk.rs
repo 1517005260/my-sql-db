@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_disk_engine_start() -> Result<()> {
-        let eng = DiskEngine::new(PathBuf::from("./tmp/sqldb-log"))?;
+        let eng = DiskEngine::new(PathBuf::from("./tmp/sqldb-log-test"))?;
         Ok(())
     }
 
