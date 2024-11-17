@@ -60,13 +60,13 @@ impl<E:Engine> MvccTransaction<E> {
         let mut iter = engine.prefix_scan(MvccKeyPrefix::Write(self.state.version).encode());
         while let Some((key, _)) = iter.next().transpose()?{
             // 这里比commit多一步删除写入log的真实数据
-            match MvccKey::decode(&key)? {
+            match MvccKey::decode(key.clone())? {
                 MvccKey::Write(_, raw_key) => {  // 这里找到的是不含版本信息的key
                     // 构造带版本信息的key
                     keys_to_be_deleted.push(MvccKey::Version(raw_key, self.state.version).encode());
                 },
                 _ => {
-                    Err(Error::Internal(format!("[Transaction rollback] Unexpected key: {:?}", String::from_utf8(&key))))
+                    return Err(Error::Internal(format!("[Transaction rollback] Unexpected key: {:?}", String::from_utf8(key))))
                 }
             }
             keys_to_be_deleted.push(key);
@@ -99,14 +99,14 @@ impl<E:Engine> MvccTransaction<E> {
         let to = MvccKey::Version(key.clone(), self.state.version).encode();
         let mut iter = engine.scan(from..=to).rev(); // rev 反转
         while let Some((key,value)) =  iter.next().transpose()?{
-            match MvccKey::decode(&key)? {
+            match MvccKey::decode(key.clone())? {
                 MvccKey::Version(_, version) => {
                     if self.state.is_visible(version) {
-                        Ok(bincode::deserialize(&value)?)
+                        return Ok(bincode::deserialize(&value)?)
                     }
                 },
                 _ => {
-                    Err(Error::Internal(format!("[Transaction get] Unexpected key: {:?}", String::from_utf8(&key))))
+                    return Err(Error::Internal(format!("[Transaction get] Unexpected key: {:?}", String::from_utf8(key))))
                 }
             }
         }

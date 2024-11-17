@@ -89,13 +89,13 @@ impl MvccKeyPrefix {
 
 impl<E:Engine> MvccTransaction<E> {
   // 开启事务
-  pub fn begin(engine: Arc<Mutex<E>>) -> Result<Self> {
+  pub fn begin(eng: Arc<Mutex<E>>) -> Result<Self> {
     // 1. 获取存储引擎
-    let mut engine= engine.lock()?;
+    let mut engine= eng.lock()?;
     // 2. 获取全局版本号，这里需要特判：第一个事务的版本号是空值
-    let next_version = match engine.get(MvccKey::NextVersion.encode()) {
-      None => 1,
+    let next_version = match engine.get(MvccKey::NextVersion.encode())? {
       Some(version) => bincode::deserialize(&version)?,
+      None => 1,
     };
     // 3. 全局版本号++
     engine.set(MvccKey::NextVersion.encode(), bincode::serialize(&(next_version + 1))?)?;
@@ -105,7 +105,7 @@ impl<E:Engine> MvccTransaction<E> {
     engine.set(MvccKey::ActiveTransactions(next_version).encode(), vec![])?;  // 事务活跃列表数据存在key里，value存空值即可
 
     Ok(Self{
-      engine: engine.clone(),
+      engine: eng.clone(),
       state: TransactionState{
         version: next_version,
         active_version,
@@ -118,11 +118,11 @@ impl<E:Engine> MvccTransaction<E> {
     let mut res = HashSet::new();
     let mut iter = eng.prefix_scan(MvccKeyPrefix::ActiveTransactions.encode());
     while let Some((key, _)) = iter.next().transpose()? {  // key是二进制
-      match MvccKey::decode(&key)? {
+      match MvccKey::decode(key.clone())? {
         MvccKey::ActiveTransactions(version) => {
           res.insert(version);
         },
-        _ => Err(Error::Internal(format!("[Scan Active Transactions] Unexpected key {:?}", String::from_utf8(&key)))?)
+        _ => return Err(Error::Internal(format!("[Scan Active Transactions] Unexpected key {:?}", String::from_utf8(key))))
       }
     }
     Ok(res)
@@ -203,25 +203,22 @@ impl<E:Engine> MvccTransaction<E> {
     // from 是最小的活跃版本，若活跃版本为空则置为 本事务版本+1
     let to = MvccKey::Version(key.clone(), u64::MAX).encode();
     // to 涵盖最大可能版本
-    if let Some((key, _)) = engine.scan(from..=to).last().transpose()?{  // 对于我要修改的key，我需要从from-to找到它的最新版本号
-      match MvccKey::decode(&key)? {
+    if let Some((key, _)) = engine.scan(from..=to).last().transpose()?{  // 取得key的最新版本
+      match MvccKey::decode(key.clone())? {
         MvccKey::Version(_, version) => {
           // 要修改的key的version是否对本事务可见
           if !self.state.is_visible(version) {
-            Err(Error::WriteConflict)
+            return Err(Error::WriteConflict)
           }
         },
         _ => {
-          Err(Error::Internal(format!(
-            "[Transaction Update] Unexpected key: {:?}",
-            String::from_utf8(&key)
-          )))
+          return Err(Error::Internal(format!("[Transaction Update] Unexpected key: {:?}", String::from_utf8(key))))
         }
       }
-    }?;
+    };
     // 3. 不冲突，写入数据
     // 3.1 记录本version写入了哪些key，用于回滚数据
-    engine.set(MvccKey::Write(self.state.version, key.clone()), vec![])?;
+    engine.set(MvccKey::Write(self.state.version, key.clone()).encode(), vec![])?;
     // 3.2 写入实际的key-value数据
     engine.set(MvccKey::Version(key.clone(), self.state.version).encode(), bincode::serialize(&value)?)?;
     Ok(())
@@ -244,9 +241,9 @@ impl<E:Engine> MvccTransaction<E> {
 // 自定义错误类型
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error{
-    Parse(String), // 在解析器阶段报错，内容为String的错误
-    Internal(String),   // 在数据库内部运行时的报错
-    WriteConflict(String),   // 事务写冲突
+  Parse(String), // 在解析器阶段报错，内容为String的错误
+  Internal(String),   // 在数据库内部运行时的报错
+  WriteConflict,   // 事务写冲突
 }
 ```
 

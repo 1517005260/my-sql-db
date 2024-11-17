@@ -154,9 +154,9 @@ pub enum MvccKeyPrefix{
 ```
 u64 - version
 bytes - 字节数组（转换为二进制的key、value等）
-unit_varint - 无附加的枚举类型，如NextVersion
-newtype_varint - ActiveTransactions(Version) 这种有附加定义 自定义数据类型 的枚举类型
-tuple_varint - Write(Version, Vec<u8>) 这种附加元组的枚举类型
+unit_variant - 无附加的枚举类型，如NextVersion
+newtype_variant - ActiveTransactions(Version) 这种有附加定义 自定义数据类型 的枚举类型
+tuple_variant - Write(Version, Vec<u8>) 这种附加元组的枚举类型
 seq - Vec<u8>
 tuple - (Version, Vec<u8>)
 ```

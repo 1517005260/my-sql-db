@@ -1,9 +1,12 @@
 // 自定义Result返回的错误类型
 // 对标准的Result进行重写即可
 
+use std::fmt;
+use std::fmt::Display;
 use std::num::{ParseFloatError, ParseIntError};
 use std::sync::PoisonError;
 use bincode::ErrorKind;
+use serde::{de, ser};
 
 pub type Result<T> = std::result::Result<T,Error>;
 
@@ -12,7 +15,7 @@ pub type Result<T> = std::result::Result<T,Error>;
 pub enum Error{
     Parse(String), // 在解析器阶段报错，内容为String的错误
     Internal(String),   // 在数据库内部运行时的报错
-    WriteConflict(String),   // 事务写冲突
+    WriteConflict,   // 事务写冲突
 }
 
 // 兼容系统本身的解析数字报错
@@ -48,3 +51,28 @@ impl From<std::io::Error> for Error{
         Error::Internal(value.to_string())
     }
 }
+
+// 事务key编码相关错误
+impl ser::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        Error::Internal(msg.to_string())
+    }
+}
+
+impl de::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        Error::Internal(msg.to_string())
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Parse(err) => write!(f, "Parse Error: {}", err),
+            Error::Internal(err) => write!(f, "Internal Error: {}", err),
+            Error::WriteConflict => write!(f, "Write conflicted in transaction, please try again"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
