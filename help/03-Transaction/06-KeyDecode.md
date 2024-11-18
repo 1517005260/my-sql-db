@@ -383,7 +383,24 @@ pub fn deserialize_key<'a, T: serde::Deserialize<'a>>(input: &'a [u8]) -> Result
 5. 测试
 
 ```rust
+#[test]
+    fn test_decode() {
+        let der_cmp = |k: MvccKey, v: Vec<u8>| {
+            let res: MvccKey = deserialize_key(&v).unwrap();
+            assert_eq!(res, k);
+        };
 
+        der_cmp(MvccKey::NextVersion, vec![0]);
+        der_cmp(MvccKey::ActiveTransactions(1), vec![1, 0, 0, 0, 0, 0, 0, 0, 1]);
+        der_cmp(
+            MvccKey::Write(1, vec![1, 2, 3]),
+            vec![2, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 0, 0],
+        );
+        der_cmp(
+            MvccKey::Version(b"abc".to_vec(), 11),
+            vec![3, 97, 98, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11],
+        );
+    }
 ```
 
 这里涉及到了对MvccKey的比较，所以需要手动实现对应注解：
@@ -396,4 +413,32 @@ pub enum MvccKey{  // 和数据key类型区分
     Write(Version,  #[serde(with = "serde_bytes")]Vec<u8>),     // 事务写入了哪些key
     Version( #[serde(with = "serde_bytes")]Vec<u8>, Version),  // (key, 所属version)
 }
+```
+
+## 修改上层Mvcc的接口
+
+由于这里我们实现了更高级的编码方法，遂对原来的mvcc.rs中的编码方法进行修改：
+
+```rust
+impl MvccKey{
+    // 编码为二进制
+    pub fn encode(&self) -> Result<Vec<u8>>{
+        serialize_key(&self)
+    }
+
+    // 解码二进制
+    pub fn decode(data: Vec<u8>) -> Result<Self> {
+        deserialize_key(&data)
+    }
+}
+
+impl MvccKeyPrefix {
+    // 编码为二进制
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        serialize_key(&self)
+    }
+}
+
+
+// 之后全局替换 .encode() 为 .encode()? 解包 Result 即可
 ```
