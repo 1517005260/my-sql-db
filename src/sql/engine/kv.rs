@@ -2,6 +2,7 @@ use std::os::unix::fs::lchown;
 use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::sql::engine::{Engine, Transaction};
+use crate::sql::parser::ast::Expression;
 use crate::sql::schema::Table;
 use crate::sql::types::{Row, Value};
 use crate::storage::{self,engine::Engine as storageEngine};
@@ -75,15 +76,40 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         Ok(())
     }
 
-    fn scan(&self, table_name: String) -> Result<Vec<Row>> {
+    fn update_row(&mut self, table: &Table, primary_key: &Value, row: Row) -> Result<()> {
+        // 对比主键是否修改，是则删除原key，建立新key
+        let new_primary_key = table.get_primary_key(&row)?;
+        if new_primary_key != *primary_key{
+            let key = Key::Row(table.name.clone(), primary_key.clone()).encode()?;
+            self.transaction.delete(key)?;
+        }
+
+        let key = Key::Row(table.name.clone(), new_primary_key.clone()).encode()?;
+        let value = bincode::serialize(&row)?;
+        self.transaction.set(key, value)?;
+        Ok(())
+    }
+
+    fn scan(&self, table_name: String, filter: Option<(String, Expression)>) -> Result<Vec<Row>> {
+        let table = self.must_get_table(table_name.clone())?;
         // 根据前缀扫描表
         let prefix = PrefixKey::Row(table_name.clone()).encode()?;
         let results = self.transaction.prefix_scan(prefix)?;
 
         let mut rows = Vec::new();
         for res in results {
+            // 根据filter过滤数据
             let row: Row = bincode::deserialize(&res.value)?;
-            rows.push(row);
+            if let Some((col, expression)) = &filter {
+                let col_index = table.get_col_index(col)?;
+                if Value::from_expression_to_value(expression.clone()) == row[col_index].clone(){
+                    // 过滤where的条件和这里的列数据是否一致
+                    rows.push(row);
+                }
+            }else{
+                // filter不存在，查找所有数据
+                rows.push(row);
+            }
         }
         Ok(rows)
     }
@@ -167,6 +193,34 @@ mod tests {
         s.execute("insert into t1(c, a) values(200, 3);")?;
 
         s.execute("select * from t1;")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_update() -> Result<()> {
+        let kvengine = KVEngine::new(MemoryEngine::new());
+        let mut s = kvengine.session()?;
+
+        s.execute(
+            "create table t1 (a int primary key, b text default 'vv', c integer default 100);",
+        )?;
+        s.execute("insert into t1 values(1, 'a', 1);")?;
+        s.execute("insert into t1 values(2, 'b', 2);")?;
+        s.execute("insert into t1 values(3, 'c', 3);")?;
+
+        let v = s.execute("update t1 set b = 'aa' where a = 1;")?;
+        let v = s.execute("update t1 set a = 33 where a = 3;")?;
+        println!("{:?}", v);
+
+        match s.execute("select * from t1;")? {
+            crate::sql::executor::ResultSet::Scan { columns, rows } => {
+                for row in rows {
+                    println!("{:?}", row);
+                }
+            }
+            _ => unreachable!(),
+        }
 
         Ok(())
     }

@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
 use crate::sql::parser::ast::Expression;
 use crate::sql::schema::Table;
 use crate::sql::types::{Row, Value};
 use crate::error::{Error, Result};
+use crate::error::Error::Internal;
 
 pub struct Insert{
     table_name:String,
@@ -89,4 +90,49 @@ fn modify_row(table: &Table, columns: &Vec<String>, values: &Row) -> Result<Row>
     }
 
     Ok(res)
+}
+
+pub struct Update<T: Transaction>{
+    table_name:String,
+    scan: Box<dyn Executor<T>>,   // scan 是一个执行节点，这里是递归的定义。执行节点又是Executor<T>接口的实现，在编译期不知道类型，需要Box包裹
+    columns: BTreeMap<String, Expression>,
+}
+
+impl<T:Transaction> Update<T>{
+    pub fn new(table_name:String,scan:Box<dyn Executor<T>>,columns:BTreeMap<String,Expression>) -> Box<Self> {
+        Box::new(Self{
+            table_name,scan,columns
+        })
+    }
+}
+
+impl<T:Transaction> Executor<T> for  Update<T>{
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        let mut count = 0;
+        // 先获取到扫描的结果，这是我们需要更新的数据
+        match self.scan.execute(transaction)? {
+            ResultSet::Scan {columns, rows} => {
+                // 处理更新流程
+                let table = transaction.must_get_table(self.table_name.clone())?;
+                // 遍历每行，更新列数据
+                for row in rows{
+                    let mut new_row = row.clone();
+                    let mut primary_key = table.get_primary_key(&row)?;
+                    for (i ,col) in columns.iter().enumerate(){
+                        if let Some(expression) = self.columns.get(col) {
+                            // 如果本列需要修改
+                            new_row[i] = Value::from_expression_to_value(expression.clone());
+                        }
+                    }
+                    // 如果涉及了主键的更新，由于我们存储时用的是表名和主键一起作为key，所以这里需要删了重新建key
+                    // 否则，key部分(table_name, primary_key) 不动，直接变value即可
+                    transaction.update_row(&table, &primary_key, new_row)?;
+                    count += 1;
+                }
+            },
+            _ => return Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
+
+        Ok(ResultSet::Update {count})
+    }
 }

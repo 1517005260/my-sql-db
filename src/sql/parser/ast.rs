@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use crate::sql::types::DataType;
 // 本模块是抽象语法树的定义
 
@@ -12,12 +13,12 @@ pub struct Column{            // 列的各种属性
     pub is_primary_key: bool,       // 本列是否为主键
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Clone)]
 pub enum Expression{        // 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
     Consts(Consts)
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Consts{
     Null,
     Boolean(bool),
@@ -47,5 +48,10 @@ pub enum Sentence{
     },
     Select{
         table_name: String,
-    }
+    },
+    Update{
+        table_name: String,
+        columns: BTreeMap<String, Expression>,
+        condition: Option<(String, Expression)>
+    },
 }

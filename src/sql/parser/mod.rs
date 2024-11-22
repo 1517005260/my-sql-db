@@ -1,7 +1,8 @@
+use std::collections::BTreeMap;
 use std::iter::Peekable;
 use crate::sql::parser::lexer::{Keyword, Lexer, Token};
 use crate::error::{Result, Error};
-use crate::sql::parser::ast::Column;
+use crate::sql::parser::ast::{Column, Expression, Sentence};
 use crate::sql::types::DataType;
 
 mod lexer;  // lexer模块仅parser文件内部可使用
@@ -23,7 +24,7 @@ impl<'a> Parser<'a> {
 // Parser的其他方法
 impl<'a> Parser<'a> {
     // 解析获的sql
-    pub fn parse(&mut self) -> Result<ast::Sentence>{
+    pub fn parse(&mut self) -> Result<Sentence>{
         let sentence = self.parse_sentence()?;   // 获取解析得的语句
 
         self.expect_next_token_is(Token::Semicolon)?;  // sql语句以分号结尾
@@ -35,12 +36,13 @@ impl<'a> Parser<'a> {
     }
 
     // 解析语句
-    fn parse_sentence(&mut self) -> Result<ast::Sentence>{
+    fn parse_sentence(&mut self) -> Result<Sentence>{
         // 我们尝试查看第一个Token以进行分类
         match self.peek()? {
             Some(Token::Keyword(Keyword::Create)) => self.parse_ddl(),
             Some(Token::Keyword(Keyword::Select)) => self.parse_select(),
             Some(Token::Keyword(Keyword::Insert)) => self.parse_insert(),
+            Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
             Some(token) => Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),  // 其他token
             None => Err(Error::Parse("[Parser] Unexpected EOF".to_string()))
         }
@@ -58,7 +60,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析create table语句
-    fn parse_ddl_create_table(&mut self) -> Result<ast::Sentence>{
+    fn parse_ddl_create_table(&mut self) -> Result<Sentence>{
         // 在进入本方法之前，已经由parse_ddl解析了CREATE TABLE，所以这里应该是表名和其他列约束条件
         let table_name = self.expect_next_is_ident()?;
 
@@ -74,7 +76,7 @@ impl<'a> Parser<'a> {
         }
 
         self.expect_next_token_is(Token::CloseParen)?;
-        Ok(ast::Sentence::CreateTable {
+        Ok(Sentence::CreateTable {
             name: table_name,
             columns
         })
@@ -139,7 +141,7 @@ impl<'a> Parser<'a> {
     }
 
     // 分类二：Select语句
-    fn parse_select(&mut self) -> Result<ast::Sentence>{
+    fn parse_select(&mut self) -> Result<Sentence>{
         // 先只实现select *
         self.expect_next_token_is(Token::Keyword(Keyword::Select))?;
         self.expect_next_token_is(Token::Asterisk)?;
@@ -147,13 +149,13 @@ impl<'a> Parser<'a> {
 
         // 识别完关键字之后为表名
         let table_name = self.expect_next_is_ident()?;
-        Ok(ast::Sentence::Select {
+        Ok(Sentence::Select {
             table_name
         })
     }
 
     // 分类三：Insert语句
-    fn parse_insert(&mut self) -> Result<ast::Sentence>{
+    fn parse_insert(&mut self) -> Result<Sentence>{
         self.expect_next_token_is(Token::Keyword(Keyword::Insert))?;
         self.expect_next_token_is(Token::Keyword(Keyword::Into))?;
         let table_name = self.expect_next_is_ident()?;
@@ -193,11 +195,50 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        Ok(ast::Sentence::Insert {
+        Ok(Sentence::Insert {
             table_name,
             columns,
             values
         })
+    }
+
+    // 分类：Update语句
+    fn parse_update(&mut self) -> Result<Sentence>{
+        self.expect_next_token_is(Token::Keyword(Keyword::Update))?;
+        let table_name = self.expect_next_is_ident()?;
+        self.expect_next_token_is(Token::Keyword(Keyword::Set))?;
+
+        // loop 更新 columns
+        // 又由于Set时不能出现重复，即 set a=1, a=2，所以需要去重
+        let mut columns = BTreeMap::new();
+        loop{
+            let col = self.expect_next_is_ident()?;
+            self.expect_next_token_is(Token::Equal)?;
+            let value = self.parse_expression()?;
+            if columns.contains_key(&col){
+                return Err(Error::Parse(format!("[Parser] Update column {} conflicted",col)));
+            }
+            columns.insert(col, value);
+            // 如果后续没有逗号，说明解析完成，退出循环
+            if self.next_if_is_token(Token::Comma).is_none(){
+                break;
+            }
+        }
+        Ok(Sentence::Update {
+            table_name,
+            columns,
+            condition: self.parse_where_condition()?,
+        })
+    }
+
+    fn parse_where_condition(&mut self) -> Result<Option<(String, Expression)>>{
+        if self.next_if_is_token(Token::Keyword(Keyword::Where)).is_none(){
+            return Ok(None);  // 没有指定where条件
+        }
+        let col = self.expect_next_is_ident()?;
+        self.expect_next_token_is(Token::Equal)?;
+        let value = self.parse_expression()?;
+        Ok(Some((col, value)))
     }
 
 
@@ -337,6 +378,28 @@ mod tests{
         let sql = "select * from tbl1;";
         let sentence = Parser::new(sql).parse()?;
         println!("{:?}", sentence);
+        Ok(())
+    }
+
+    #[test]
+    fn test_parser_update() -> Result<()> {
+        let sql = "update tbl set a = 1, b = 2.0 where c = 'a';";
+        let sentence = Parser::new(sql).parse()?;
+        println!("{:?}",sentence);
+        assert_eq!(
+            sentence,
+            Sentence::Update {
+                table_name: "tbl".into(),
+                columns: vec![
+                    ("a".into(), ast::Consts::Integer(1).into()),
+                    ("b".into(), ast::Consts::Float(2.0).into()),
+                ]
+                    .into_iter()
+                    .collect(),
+                condition: Some(("c".into(), ast::Consts::String("a".into()).into())),
+            }
+        );
+
         Ok(())
     }
 }

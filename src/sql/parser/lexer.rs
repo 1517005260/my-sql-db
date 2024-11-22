@@ -20,6 +20,7 @@ pub enum Token {
     Plus,               // +
     Minus,              // -
     Slash,              // /
+    Equal,              // =
 }
 
 impl Display for Token {
@@ -37,6 +38,7 @@ impl Display for Token {
             Token::Plus => "+",
             Token::Minus => "-",
             Token::Slash => "/",
+            Token::Equal => "=",
         })
     }
 }
@@ -66,6 +68,9 @@ pub enum Keyword {
     Null,
     Primary,
     Key,
+    Update,
+    Set,
+    Where,
 }
 
 // word -> Keyword
@@ -96,6 +101,9 @@ impl Keyword {
                 "NULL" => Keyword::Null,
                 "PRIMARY" => Keyword::Primary,
                 "KEY" => Keyword::Key,
+                "UPDATE" => Keyword::Update,
+                "SET" => Keyword::Set,
+                "WHERE" => Keyword::Where,
                 _ => return None,
             }
         )
@@ -128,6 +136,9 @@ impl Keyword {
             Keyword::Null => "NULL",
             Keyword::Primary => "PRIMARY",
             Keyword::Key => "KEY",
+            Keyword::Update => "UPDATE",
+            Keyword::Set => "SET",
+            Keyword::Where => "WHERE",
         }
     }
 }
@@ -253,6 +264,7 @@ impl<'a> Lexer<'a> {
             '+' => Some(Token::Plus),
             '-' => Some(Token::Minus),
             '/' => Some(Token::Slash),
+            '=' => Some(Token::Equal),
             _ => None,
         })
     }

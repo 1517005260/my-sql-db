@@ -2,10 +2,11 @@ mod kv;
 
 use crate::error::{Error, Result};
 use crate::sql::executor::ResultSet;
+use crate::sql::parser::ast::Expression;
 use crate::sql::parser::Parser;
 use crate::sql::planner::Plan;
 use crate::sql::schema::Table;
-use crate::sql::types::Row;
+use crate::sql::types::{Row, Value};
 
 // 定义sql引擎的抽象接口
 pub trait Engine: Clone{               // 实现engine的结构体必须可以被clone
@@ -29,8 +30,11 @@ pub trait Transaction {
     // 创建行
     fn create_row(&mut self,table:String,row: Row)-> Result<()>;
 
+    // 更新行
+    fn update_row(&mut self,table:&Table, primary_key:&Value, row: Row)-> Result<()>;
+
     // 扫描表
-    fn scan(&self,table_name: String)-> Result<Vec<Row>>;
+    fn scan(&self,table_name: String, filter: Option<(String, Expression)>)-> Result<Vec<Row>>;
 
     // DDL
     fn create_table(&mut self, table:Table)-> Result<()>;
@@ -49,7 +53,7 @@ pub struct Session<E:Engine>{
     engine:E  // 存储当前的 SQL 引擎实例
 }
 
-impl<E:Engine> Session<E>{
+impl<E:Engine + 'static> Session<E>{
     // 执行客户端传来的sql语句
     pub fn execute(&mut self, sql: &str) -> Result<ResultSet>{
         match Parser::new(sql).parse()?{    // 传进来的sql直接扔给parser解析

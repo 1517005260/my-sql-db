@@ -31,6 +31,12 @@ impl Table{
         let index = self.columns.iter().position(|c| c.is_primary_key).unwrap();  // 由于建表时已经判断了主键信息，所以这里直接解包即可
         Ok(row[index].clone())
     }
+
+    // 获取列索引
+    pub fn get_col_index(&self, col_name: &str) -> Result<usize> {
+        self.columns.iter().position(|c| c.name == col_name)
+            .ok_or(Error::Internal(format!("[Get Column Index Failed] Column {} not found", col_name)))
+    }
 }
 
 #[derive(Debug,PartialEq,Serialize,Deserialize)]

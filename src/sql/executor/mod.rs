@@ -4,7 +4,7 @@ mod query;
 
 use crate::error::Result;
 use crate::sql::engine::Transaction;
-use crate::sql::executor::mutation::Insert;
+use crate::sql::executor::mutation::{Insert, Update};
 use crate::sql::executor::query::Scan;
 use crate::sql::executor::schema::CreateTable;
 use crate::sql::planner::Node;
@@ -15,6 +15,7 @@ pub trait Executor<T:Transaction>{
 }
 
 // 执行结果集的定义
+#[derive(Debug)]
 pub enum ResultSet{
     CreateTable{
         table_name: String,   // 创建表成功，则返回表名
@@ -25,15 +26,22 @@ pub enum ResultSet{
     Scan{
         columns: Vec<String>,  // 扫描的列
         rows: Vec<Row>,        // 扫描的行
-    }
+    },
+    Update{
+        count: usize,   // 更新了多少条数据
+    },
 }
 
-impl<T:Transaction> dyn Executor<T>{
+impl<T:Transaction + 'static> dyn Executor<T>{
     pub fn build(node: Node) -> Box<dyn Executor<T>>{
         match node {
             Node::CreateTable {schema} => CreateTable::new(schema),
             Node::Insert {table_name,columns,values} => Insert::new(table_name, columns, values),
-            Node::Scan {table_name} => Scan::new(table_name),
+            Node::Scan {table_name,filter} => Scan::new(table_name,filter),
+            Node::Update {table_name, scan, columns} =>
+                Update::new(table_name,
+                            Self::build(*scan),
+                            columns),
         }
     }
 }

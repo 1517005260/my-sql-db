@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use crate::sql::engine::Transaction;
 use crate::error::Result;
 use crate::sql::executor::{Executor, ResultSet};
@@ -21,7 +22,14 @@ pub enum Node{
     Scan{
         // select
         table_name: String,
-    }
+        // 过滤条件
+        filter: Option<(String, Expression)>,
+    },
+    Update{
+        table_name: String,
+        scan: Box<Node>,
+        columns: BTreeMap<String, Expression>,
+    },
 }
 
 // 定义执行计划，执行计划的底层是不同执行节点
@@ -36,7 +44,7 @@ impl Plan{
     }
 
     // planner与executor交互，plan节点 -> 执行器结构体
-    pub fn execute<T:Transaction>(self, transaction :&mut T) -> Result<ResultSet>{
+    pub fn execute<T:Transaction + 'static>(self, transaction :&mut T) -> Result<ResultSet>{
         <dyn Executor<T>>::build(self.0).execute(transaction)  // self.0 == node 只有这一个元素
     }
 }
@@ -138,6 +146,7 @@ mod tests {
             p,
             Plan(Node::Scan {
                 table_name: "tbl1".to_string(),
+                filter: None,
             })
         );
 

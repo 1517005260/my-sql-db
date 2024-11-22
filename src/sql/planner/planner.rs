@@ -50,7 +50,15 @@ impl Planner {
                 },
 
             Sentence::Select {table_name} =>
-                Node::Scan {table_name},
+                Node::Scan {table_name, filter:None},
+
+            Sentence::Update {table_name, columns, condition} =>
+            Node::Update {
+                table_name: table_name.clone(),
+                scan: Box::new(Node::Scan {table_name, filter: condition}),
+                columns,
+            },
+
             }
         }
 }
