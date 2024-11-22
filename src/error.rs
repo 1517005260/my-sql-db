@@ -5,6 +5,7 @@ use std::array::TryFromSliceError;
 use std::fmt;
 use std::fmt::Display;
 use std::num::{ParseFloatError, ParseIntError};
+use std::string::FromUtf8Error;
 use std::sync::PoisonError;
 use bincode::ErrorKind;
 use serde::{de, ser};
@@ -56,6 +57,13 @@ impl From<std::io::Error> for Error{
 // &[u8] -> Vec<u8> 相关错误
 impl From<TryFromSliceError> for Error {
     fn from(value: TryFromSliceError) -> Self {
+        Error::Internal(value.to_string())
+    }
+}
+
+// String from utf 8 错误
+impl From<FromUtf8Error> for Error {
+    fn from(value: FromUtf8Error) -> Self {
         Error::Internal(value.to_string())
     }
 }

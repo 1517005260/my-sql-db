@@ -82,7 +82,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析column
-    fn parse_ddl_column(&mut self) -> Result<ast::Column>{
+    fn parse_ddl_column(&mut self) -> Result<Column>{
         let mut column: Column = Column{
             name: self.expect_next_is_ident()?,
             datatype: match self.next()? {
@@ -94,6 +94,7 @@ impl<'a> Parser<'a> {
             },
             nullable: None,
             default: None,
+            is_primary_key: false,
         };
 
         // 解析是否为空，是否有默认值
@@ -105,6 +106,10 @@ impl<'a> Parser<'a> {
                     column.nullable = Some(false);
                 },
                 Keyword::Default => column.default = Some(self.parse_expression()?),
+                Keyword::Primary => {
+                    self.expect_next_token_is(Token::Keyword(Keyword::Key))?;  // 关键字为primary key
+                    column.is_primary_key = true;
+                },
                 keyword => return Err(Error::Parse(format!("[Parser] Unexpected keyword {}",keyword))),
             }
         }

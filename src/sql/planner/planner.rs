@@ -35,7 +35,8 @@ impl Planner {
                                     name: c.name,
                                     datatype: c.datatype,
                                     nullable,
-                                    default
+                                    default,
+                                    is_primary_key: c.is_primary_key,
                                 }
                             }).collect(),
                     }

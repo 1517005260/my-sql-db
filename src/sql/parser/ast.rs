@@ -8,7 +8,8 @@ pub struct Column{            // 列的各种属性
     pub name: String,         // 列名
     pub datatype: DataType,   // 列数据类型
     pub nullable: Option<bool>, // 列是否为空
-    pub default: Option<Expression> // 列的默认值
+    pub default: Option<Expression>, // 列的默认值
+    pub is_primary_key: bool,       // 本列是否为主键
 }
 
 #[derive(Debug,PartialEq)]
