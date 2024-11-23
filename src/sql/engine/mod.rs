@@ -33,6 +33,9 @@ pub trait Transaction {
     // 更新行
     fn update_row(&mut self,table:&Table, primary_key:&Value, row: Row)-> Result<()>;
 
+    // 删除行
+    fn delete_row(&mut self,table:&Table, primary_key:&Value)-> Result<()>;
+
     // 扫描表
     fn scan(&self,table_name: String, filter: Option<(String, Expression)>)-> Result<Vec<Row>>;
 

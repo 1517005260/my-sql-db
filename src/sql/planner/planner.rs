@@ -59,6 +59,12 @@ impl Planner {
                 columns,
             },
 
+            Sentence::Delete {table_name, condition} =>
+                Node::Delete {
+                    table_name:table_name.clone(),
+                    scan: Box::new(Node::Scan {table_name, filter: condition})
+                },
+
             }
         }
 }

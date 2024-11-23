@@ -136,3 +136,35 @@ impl<T:Transaction> Executor<T> for  Update<T>{
         Ok(ResultSet::Update {count})
     }
 }
+
+pub struct Delete<T: Transaction>{
+    table_name:String,
+    scan: Box<dyn Executor<T>>,
+}
+
+impl<T:Transaction> Delete<T>{
+    pub fn new(table_name:String,scan:Box<dyn Executor<T>>) -> Box<Self> {
+        Box::new(Self{
+            table_name,scan
+        })
+    }
+}
+
+impl<T:Transaction> Executor<T> for Delete<T>{
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        let mut count = 0;
+        match self.scan.execute(transaction)? {
+            ResultSet::Scan {columns:_, rows} => {  // columns 参数未用到
+                let table = transaction.must_get_table(self.table_name)?;
+                for row in rows{
+                    // 删除行，而行定位的key为(table_name, primary_key)，所以还需要主键
+                    let primary_key = table.get_primary_key(&row)?;
+                    transaction.delete_row(&table, &primary_key)?;
+                    count +=1;
+                }
+                Ok(ResultSet::Delete {count})
+            },
+            _ => Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
+    }
+}

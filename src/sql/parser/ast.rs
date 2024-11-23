@@ -54,4 +54,8 @@ pub enum Sentence{
         columns: BTreeMap<String, Expression>,
         condition: Option<(String, Expression)>
     },
+    Delete{
+        table_name: String,
+        condition: Option<(String, Expression)>,
+    },
 }

@@ -43,6 +43,7 @@ impl<'a> Parser<'a> {
             Some(Token::Keyword(Keyword::Select)) => self.parse_select(),
             Some(Token::Keyword(Keyword::Insert)) => self.parse_insert(),
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
+            Some(Token::Keyword(Keyword::Delete)) => self.parse_delete(),
             Some(token) => Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),  // 其他token
             None => Err(Error::Parse("[Parser] Unexpected EOF".to_string()))
         }
@@ -227,6 +228,17 @@ impl<'a> Parser<'a> {
         Ok(Sentence::Update {
             table_name,
             columns,
+            condition: self.parse_where_condition()?,
+        })
+    }
+
+    // 分类：Delete语句
+    fn parse_delete(&mut self) -> Result<Sentence>{
+        self.expect_next_token_is(Token::Keyword(Keyword::Delete))?;
+        self.expect_next_token_is(Token::Keyword(Keyword::From))?;
+        let table_name = self.expect_next_is_ident()?;
+        Ok(Sentence::Delete {
+            table_name,
             condition: self.parse_where_condition()?,
         })
     }

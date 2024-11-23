@@ -30,6 +30,10 @@ pub enum Node{
         scan: Box<Node>,
         columns: BTreeMap<String, Expression>,
     },
+    Delete{
+        table_name: String,
+        scan: Box<Node>,
+    },
 }
 
 // 定义执行计划，执行计划的底层是不同执行节点

@@ -4,7 +4,7 @@ mod query;
 
 use crate::error::Result;
 use crate::sql::engine::Transaction;
-use crate::sql::executor::mutation::{Insert, Update};
+use crate::sql::executor::mutation::{Delete, Insert, Update};
 use crate::sql::executor::query::Scan;
 use crate::sql::executor::schema::CreateTable;
 use crate::sql::planner::Node;
@@ -30,6 +30,9 @@ pub enum ResultSet{
     Update{
         count: usize,   // 更新了多少条数据
     },
+    Delete{
+      count: usize,   // 删除了多少条数据
+    },
 }
 
 impl<T:Transaction + 'static> dyn Executor<T>{
@@ -42,6 +45,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
                 Update::new(table_name,
                             Self::build(*scan),
                             columns),
+            Node::Delete {table_name, scan} => Delete::new(table_name, Self::build(*scan)),
         }
     }
 }
