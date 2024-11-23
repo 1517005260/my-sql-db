@@ -23,6 +23,26 @@ impl Table{
             _ => return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has multiple primary keys", self.name))),
         }
 
+        // 判断列是否有效
+        for column in &self.columns {
+            // 主键不能空
+            if column.is_primary_key && column.nullable {
+                return Err(Error::Internal(format!("[CreateTable] Failed, primary key \" {} \" cannot be nullable in table \" {} \"", column.name, self.name)));
+            }
+
+            // 列默认值需要和列数据类型匹配
+            if let Some(default_value) = &column.default {
+                match default_value.get_datatype() {
+                    Some(datatype) => {
+                        if datatype != column.datatype {
+                            return Err(Error::Internal(format!("[CreateTable] Failed, default value type for column \" {} \" mismatch in table \" {} \"", column.name, self.name)))
+                        }
+                    },
+                    None =>{}
+                }
+            }
+        }
+
         Ok(())
     }
 

@@ -15,7 +15,7 @@ pub trait Executor<T:Transaction>{
 }
 
 // 执行结果集的定义
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ResultSet{
     CreateTable{
         table_name: String,   // 创建表成功，则返回表名

@@ -24,7 +24,7 @@ impl Planner {
                         name,
                         columns:
                             columns.into_iter().map(|c| {
-                                let nullable = c.nullable.unwrap_or(true); // nullable解包出来是None，说明可以为空
+                                let nullable = c.nullable.unwrap_or(!c.is_primary_key);  // 如果是主键，则!c.is_primary_key == false，不能为空
                                 let default = match c.default {
                                     Some(expression) => Some(Value::from_expression_to_value(expression)),
                                     None if nullable => Some(Value::Null),  // 如果没写default且可为null，则默认null

@@ -1,186 +1,75 @@
-use std::os::unix::fs::lchown;
-use serde::{Deserialize, Serialize};
-use crate::error::{Error, Result};
-use crate::sql::engine::{Engine, Transaction};
-use crate::sql::parser::ast::Expression;
-use crate::sql::schema::Table;
-use crate::sql::types::{Row, Value};
-use crate::storage::{self,engine::Engine as storageEngine};
-use crate::storage::keyencode::serialize_key;
-// self 即指 crate::storage
+# 基础DML语句测试 (select, insert, update, delete)
 
-// KV engine 定义
-pub struct KVEngine<E:storageEngine> {
-    pub kv : storage::mvcc::Mvcc<E>
+先修复两个bug：
+
+1. 当bool为主键时，我们没有实现key_encode的自定义序列化，这里在storage/keyencode.rs中修改：
+
+```rust
+fn serialize_bool(self, v: bool) -> Result<()> {
+        self.output.push(v as u8);
+        Ok(())
 }
 
-impl<E:storageEngine> Clone for KVEngine<E> {
-    fn clone(&self) -> Self {
-        Self{kv: self.kv.clone()}
-    }
+fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
+where
+    V: Visitor<'de>
+{
+    let v = self.take_bytes(1)[0];
+    // v == 0 false
+    // v == 1 true
+    visitor.visit_bool(v != 0)  // v=0 则 v!=0 == false，反之 v!=0 == true
 }
+```
 
-impl<E:storageEngine> Engine for KVEngine<E> {
-    type Transaction = KVTransaction<E>;
+2. 创建表时的有效性判断不足，没有判断列有效性
+- 主键不能为空 
+- 列默认值需要和列数据类型匹配
 
-    fn begin(&self) -> Result<Self::Transaction> {
-        Ok(
-            Self::Transaction::new(self.kv.begin()?)
-        )
-    }
-}
+在sql/schema.rs中：
 
-// 封装存储引擎中的MvccTransaction
-pub struct KVTransaction<E:storageEngine>{
-    transaction : storage::mvcc::MvccTransaction<E>
-}
+```rust
+impl Table{
+    pub fn is_valid(&self) -> Result<()>{
+        // 判断列是否为空
+        if self.columns.is_empty() {
+            return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has no columns", self.name)));
+        }
 
-impl<E:storageEngine> KVTransaction<E>{
-    pub fn new(transaction: storage::mvcc::MvccTransaction<E>) -> Self {
-        Self{transaction}
-    }
-}
+        // 判断主键信息
+        match self.columns.iter().filter(|c| c.is_primary_key).count() {
+            1 => {},
+            0 => return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has no primary key", self.name))),
+            _ => return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has multiple primary keys", self.name))),
+        }
 
-impl<E:storageEngine> Transaction for KVTransaction<E> {
-    fn commit(&self) -> Result<()> {
-        self.transaction.commit()
-    }
-
-    fn rollback(&self) -> Result<()> {
-        self.transaction.rollback()
-    }
-
-    fn create_row(&mut self, table_name: String, row: Row) -> Result<()> {
-        let table = self.must_get_table(table_name.clone())?;
-        // 插入行数据的数据类型检查
-        for (i,col) in table.columns.iter().enumerate() {
-            match row[i].get_datatype() {
-                None if col.nullable => continue,
-                None => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" cannot be null",col.name))),
-                Some(datatype) if datatype != col.datatype => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" mismatched data type",col.name))),
-                _ => continue,
+        // 判断列是否有效
+        for column in &self.columns {
+            // 主键不能空
+            if column.is_primary_key && column.nullable {
+                return Err(Error::Internal(format!("[CreateTable] Failed, primary key \" {} \" cannot be nullable in table \" {} \"", column.name, self.name)));
             }
-        }
 
-        let primary_key = table.get_primary_key(&row)?;
-        let key = Key::Row(table.name.clone(), primary_key.clone()).encode()?;
-
-        // 如果主键已经存在，则报冲突
-        if self.transaction.get(key.clone())?.is_some(){
-            return Err(Error::Internal(format!("[Insert Table] Primary Key \" {} \" conflicted in table \" {} \"", primary_key, table_name)));
-        }
-
-        // 存放数据
-        let value = bincode::serialize(&row)?;
-        self.transaction.set(key, value)?;
-        Ok(())
-    }
-
-    fn update_row(&mut self, table: &Table, primary_key: &Value, row: Row) -> Result<()> {
-        // 对比主键是否修改，是则删除原key，建立新key
-        let new_primary_key = table.get_primary_key(&row)?;
-        if new_primary_key != *primary_key{
-            let key = Key::Row(table.name.clone(), primary_key.clone()).encode()?;
-            self.transaction.delete(key)?;
-        }
-
-        let key = Key::Row(table.name.clone(), new_primary_key.clone()).encode()?;
-        let value = bincode::serialize(&row)?;
-        self.transaction.set(key, value)?;
-        Ok(())
-    }
-
-    fn delete_row(&mut self, table: &Table, primary_key: &Value) -> Result<()> {
-        let key = Key::Row(table.name.clone(), primary_key.clone()).encode()?;
-        self.transaction.delete(key)
-    }
-
-    fn scan(&self, table_name: String, filter: Option<(String, Expression)>) -> Result<Vec<Row>> {
-        let table = self.must_get_table(table_name.clone())?;
-        // 根据前缀扫描表
-        let prefix = PrefixKey::Row(table_name.clone()).encode()?;
-        let results = self.transaction.prefix_scan(prefix)?;
-
-        let mut rows = Vec::new();
-        for res in results {
-            // 根据filter过滤数据
-            let row: Row = bincode::deserialize(&res.value)?;
-            if let Some((col, expression)) = &filter {
-                let col_index = table.get_col_index(col)?;
-                if Value::from_expression_to_value(expression.clone()) == row[col_index].clone(){
-                    // 过滤where的条件和这里的列数据是否一致
-                    rows.push(row);
+            // 列默认值需要和列数据类型匹配
+            if let Some(default_value) = &column.default {
+                match default_value.get_datatype() {
+                    Some(datatype) => {
+                        if datatype != column.datatype {
+                            return Err(Error::Internal(format!("[CreateTable] Failed, default value type for column \" {} \" mismatch in table \" {} \"", column.name, self.name)))
+                        }
+                    },
+                    None =>{}
                 }
-            }else{
-                // filter不存在，查找所有数据
-                rows.push(row);
             }
         }
-        Ok(rows)
-    }
-
-    fn create_table(&mut self, table: Table) -> Result<()> {
-        // 判断表是否存在
-        if self.get_table(table.name.clone())?.is_some() {
-            return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" already exists", table.name.clone())))
-        }
-
-        // 判断表是否有效
-        table.is_valid()?;
-
-        // 创建表成功，调用存储引擎存储
-        let key = Key::Table(table.name.clone()).encode()?;
-        let value = bincode::serialize(&table)?;
-        self.transaction.set(key, value)?;
 
         Ok(())
     }
-
-    fn get_table(&self, table_name: String) -> Result<Option<Table>> {
-        let key = Key::Table(table_name).encode()?;
-        let value = self.transaction.get(key)?.map(
-            |value| bincode::deserialize(&value)
-        ).transpose()?;
-        Ok(value)
-    }
 }
+```
 
-// 辅助方法：由于底层的存储的传入参数都是 u8, 用户给的字符串需要进行转换
-#[derive(Debug,Serialize,Deserialize)]
-enum Key{
-    Table(String),
-    Row(String,Value),   // (table_name, primary_key)
-}
+3. 在kv.rs中测试:
 
-impl Key{
-    pub fn encode(&self) -> Result<Vec<u8>> {
-        serialize_key(self)
-    }
-}
-
-// 辅助枚举，用于前缀扫描
-#[derive(Debug,Serialize,Deserialize)]
-enum PrefixKey {
-    Table,  // 存的时候Table是第0个枚举，Row是第一个枚举，如果这里没有Table的话，扫描的时候是对不上的，所以要Table进行占位
-    Row(String)
-}
-
-impl PrefixKey{
-    pub fn encode(&self) -> Result<Vec<u8>> {
-        serialize_key(self)
-    }
-}
-
-
-// new方法定义
-impl<E:storageEngine> KVEngine<E>{
-    pub fn new(engine:E) -> Self {
-        Self {
-            kv: storage::mvcc::Mvcc::new(engine),
-        }
-    }
-}
-
+```rust
 #[cfg(test)]
 mod tests {
 
@@ -501,3 +390,54 @@ mod tests {
         Ok(())
     }
 }
+```
+
+注意需要在executor/mod.rs中为ResultSet添加注解：
+
+```rust
+#[derive(Debug, PartialEq, Clone)]
+pub enum ResultSet{}
+```
+
+测试发现bug：`Error: Internal("[CreateTable] Failed, primary key \" a \" cannot be nullable in table \" t1 \"")`，查看原sql语句是：`create table t1 (a int primary key);`。我们没有指定a是否为空，而在planner/planner.rs中：
+
+```rust
+impl Planner {
+    fn build_sentence(&mut self, sentence: Sentence) -> Node{
+        match sentence {
+            Sentence::CreateTable {name,columns} =>
+                Node::CreateTable {
+                    schema:Table{
+                        name,
+                        columns:
+                        columns.into_iter().map(|c| {
+                            let nullable = c.nullable.unwrap_or(true); // nullable解包出来是None，说明可以为空
+                            let default = match c.default {
+                                Some(expression) => Some(Value::from_expression_to_value(expression)),
+                                None if nullable => Some(Value::Null),  // 如果没写default且可为null，则默认null
+                                None => None,
+                            };
+
+                            schema::Column{
+                                name: c.name,
+                                datatype: c.datatype,
+                                nullable,
+                                default,
+                                is_primary_key: c.is_primary_key,
+                            }
+                        }).collect(),
+                    }
+                },
+            ...
+        }
+    }
+}
+```
+
+代码的建表逻辑是：我们如果没有指定列可否为空，则可为空，而主键是不能为空的，所以产生了bug。
+
+所以修改为：
+
+```rust
+let nullable = c.nullable.unwrap_or(!c.is_primary_key);  // 如果是主键，则!c.is_primary_key == false，不能为空
+```

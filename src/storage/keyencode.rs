@@ -34,7 +34,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;  // 不用实现
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        todo!()
+        self.output.push(v as u8);
+        Ok(())
     }
 
     fn serialize_i8(self, v: i8) -> Result<()> {
@@ -292,7 +293,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>
     {
-        todo!()
+        let v = self.take_bytes(1)[0];
+        // v == 0 false
+        // v == 1 true
+        visitor.visit_bool(v != 0)  // v=0 则 v!=0 == false，反之 v!=0 == true
     }
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
