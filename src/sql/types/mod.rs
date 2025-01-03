@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use crate::sql::parser::ast::{Consts, Expression};
@@ -50,6 +51,26 @@ impl Display for Value {
             Value::Integer(v) => write!(f, "{}", v),
             Value::Float(v) => write!(f, "{}", v),
             Value::String(v) => write!(f, "{}", v),
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    // 参数：self-当前值；other-需要比较的值
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // null 是自定义类型，需要我们自己实现比较的逻辑
+            (Value::Null, Value::Null) => Some(Ordering::Equal),
+            (Value::Null, _) => Some(Ordering::Less),
+            (_, Value::Null) => Some(Ordering::Greater),
+            // 剩下这些系统自带类型已经实现好了partial_cmp，我们直接调就行
+            (Value::Boolean(a), Value::Boolean(b)) => a.partial_cmp(b),
+            (Value::Integer(a), Value::Integer(b)) => a.partial_cmp(b),
+            (Value::Integer(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
+            (Value::Float(a), Value::Integer(b)) => a.partial_cmp(&(*b as f64)),
+            (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
+            (Value::String(a), Value::String(b)) => a.partial_cmp(b),
+            (_, _) => None,  // 其他情况统一认为不可比
         }
     }
 }

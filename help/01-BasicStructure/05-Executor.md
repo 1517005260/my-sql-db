@@ -147,7 +147,7 @@ impl dyn Executor{
 ```
 
 **解释：为什么需要`Box<>`的包裹**：
-- `node`的类型在运行时才能确定，接口需要动态分发，因此用`dyn Executor`。
+- `node`的类型在运行时才能确定，接口需要动态分发（即match node{}），因此用`dyn Executor`接收运行时动态match的结果。
 - 各个执行器node的大小不同，需要在堆上分配空间，所以使用`Box`来动态存储 `dyn Executor`。
 - 这两者结合，达到了**运行时多态**的效果。与接口泛型不同的是，后者是静态的，dyn trait是动态的。
 

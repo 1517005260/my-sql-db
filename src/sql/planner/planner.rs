@@ -49,8 +49,20 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {table_name} =>
-                Node::Scan {table_name, filter:None},
+            Sentence::Select {table_name, order_by} =>
+                {
+                    let scan_node = Node::Scan {table_name, filter:None};
+                    // 如果有order by，那么这里就返回OrderBy节点而不是Scan节点
+                    if !order_by.is_empty() {
+                        let node = Node::OrderBy {
+                            scan: Box::new(scan_node),
+                            order_by,
+                        };
+                        node
+                    }else {
+                        scan_node
+                    }
+                },
 
             Sentence::Update {table_name, columns, condition} =>
             Node::Update {

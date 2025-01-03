@@ -27,6 +27,13 @@ pub enum Consts{
     String(String),
 }
 
+// 排序抽象语法
+#[derive(Debug, PartialEq, Clone)]
+pub enum OrderBy{
+    Asc,
+    Desc,
+}
+
 // 定义 Consts -> Expression 的类型转换
 impl From<Consts> for Expression{
     fn from(c: Consts) -> Self{
@@ -48,6 +55,7 @@ pub enum Sentence{
     },
     Select{
         table_name: String,
+        order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
     },
     Update{
         table_name: String,

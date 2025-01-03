@@ -500,4 +500,31 @@ mod tests {
         std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
+
+    #[test]
+    fn test_sort() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut s = kvengine.session()?;
+        setup_table(&mut s)?;
+
+        s.execute("insert into t3 values (1, 34, 22, 1.22);")?;
+        s.execute("insert into t3 values (4, 23, 65, 4.23);")?;
+        s.execute("insert into t3 values (3, 56, 22, 2.88);")?;
+        s.execute("insert into t3 values (2, 87, 57, 6.78);")?;
+        s.execute("insert into t3 values (5, 87, 14, 3.28);")?;
+        s.execute("insert into t3 values (7, 87, 82, 9.52);")?;
+
+        match s.execute("select * from t3 order by b, c desc;")? {
+            ResultSet::Scan { columns, rows } => {
+                for r in rows {
+                    println!("{:?}", r);
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
 }

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use crate::sql::engine::Transaction;
 use crate::error::Result;
 use crate::sql::executor::{Executor, ResultSet};
-use crate::sql::parser::ast::{Expression, Sentence};
+use crate::sql::parser::ast::{Expression, OrderBy, Sentence};
 use crate::sql::planner::planner::Planner;
 use crate::sql::schema::Table;
 
@@ -33,6 +33,10 @@ pub enum Node{
     Delete{
         table_name: String,
         scan: Box<Node>,
+    },
+    OrderBy{
+        scan: Box<Node>,
+        order_by: Vec<(String, OrderBy)>,
     },
 }
 

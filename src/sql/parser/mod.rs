@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::iter::Peekable;
 use crate::sql::parser::lexer::{Keyword, Lexer, Token};
 use crate::error::{Result, Error};
-use crate::sql::parser::ast::{Column, Expression, Sentence};
+use crate::sql::parser::ast::{Column, Expression, OrderBy, Sentence};
 use crate::sql::types::DataType;
 
 mod lexer;  // lexer模块仅parser文件内部可使用
@@ -151,7 +151,8 @@ impl<'a> Parser<'a> {
         // 识别完关键字之后为表名
         let table_name = self.expect_next_is_ident()?;
         Ok(Sentence::Select {
-            table_name
+            table_name,
+            order_by: self.parse_order_by_condition()?,
         })
     }
 
@@ -253,6 +254,30 @@ impl<'a> Parser<'a> {
         Ok(Some((col, value)))
     }
 
+    fn parse_order_by_condition(&mut self) -> Result<Vec<(String, OrderBy)>>{
+        let mut order_by_condition = Vec::new();
+        if self.next_if_is_token(Token::Keyword(Keyword::Order)).is_none(){
+            return Ok(order_by_condition); // 没有指定 Order By 条件
+        }
+        self.expect_next_token_is(Token::Keyword(Keyword::By))?;
+
+        loop{ // 可能有多个排序条件
+            let col = self.expect_next_is_ident()?;
+            // 可以不指定asc或者desc，默认asc
+            // matches! 是 Rust 中的一个宏，用于检查一个值是否与给定的模式匹配
+            let order = match self.next_if(|token| matches!(token, Token::Keyword(Keyword::Asc) | Token::Keyword(Keyword::Desc))){
+                Some(Token::Keyword(Keyword::Asc)) => OrderBy::Asc,
+                Some(Token::Keyword(Keyword::Desc)) => OrderBy::Desc,
+                _ => OrderBy::Asc,  // 默认asc
+            };
+
+            order_by_condition.push((col, order));
+            if self.next_if_is_token(Token::Comma).is_none(){
+                break;
+            }
+        }
+        Ok(order_by_condition)
+    }
 
     // 一些小工具
     // 重写peek方法，因为原peek是迭代器，会返回Option，可能为None，但是我们不希望返回None
@@ -389,7 +414,28 @@ mod tests{
     fn test_parser_select() -> Result<()> {
         let sql = "select * from tbl1;";
         let sentence = Parser::new(sql).parse()?;
-        println!("{:?}", sentence);
+        assert_eq!(
+            sentence,
+            ast::Sentence::Select {
+                table_name: "tbl1".to_string(),
+                order_by: vec![],  // 没有排序条件
+            }
+        );
+
+        let sql = "select * from tbl1 order by a, b asc, c desc;";
+        let sentence = Parser::new(sql).parse()?;
+        assert_eq!(
+            sentence,
+            ast::Sentence::Select {
+                table_name: "tbl1".to_string(),
+                order_by: vec![
+                    ("a".to_string(), OrderBy::Asc),
+                    ("b".to_string(), OrderBy::Asc),
+                    ("c".to_string(), OrderBy::Desc),
+                ],
+            }
+        );
+
         Ok(())
     }
 

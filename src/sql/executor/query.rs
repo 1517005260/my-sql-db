@@ -1,6 +1,11 @@
+use std::cmp::Ordering::Equal;
+use std::collections::HashMap;
+use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
-use crate::sql::parser::ast::Expression;
+use crate::sql::parser::ast::{Expression, OrderBy};
+use crate::error::Error::Internal;
+use crate::sql::parser::ast::OrderBy::Asc;
 
 pub struct Scan{
     table_name: String,
@@ -23,5 +28,55 @@ impl<T:Transaction> Executor<T> for Scan{
                 rows,
             }
         )
+    }
+}
+
+pub struct Order<T: Transaction>{
+    scan: Box<dyn Executor<T>>,
+    order_by: Vec<(String, OrderBy)>
+}
+
+impl<T:Transaction> Order<T>{
+    pub fn new(scan: Box<dyn Executor<T>>, order_by: Vec<(String, OrderBy)>) -> Box<Self>{
+        Box::new(Self{ scan, order_by })
+    }
+}
+
+impl<T:Transaction> Executor<T> for Order<T>{
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        // 首先和update一样，先需要拿到scan节点，否则报错
+        match self.scan.execute(transaction){
+            Ok(ResultSet::Scan {columns, mut rows}) => {
+                // 处理排序逻辑
+                // 首先我们要拿到排序列在整张表里的下标，比如有abcd四列，要对bd两列排序，下标就是b-1,d-3
+                // 而在order by 的排序条件里，下标是 b-0,d-1 需要修改
+                let mut order_col_index = HashMap::new();
+                for (i, (col_name, _)) in self.order_by.iter().enumerate() {
+                    // 这里需要判断，有可能用户指定的排序列不在表中，需要报错
+                    match columns.iter().position(|c| *c == *col_name) {
+                        Some(position) => order_col_index.insert(i, position),
+                        None => return Err(Internal(format!("order by column {} is not in table", col_name))),
+                    };
+                }
+
+                rows.sort_by(|row1, row2|{
+                    for(i, (_, condition)) in self.order_by.iter().enumerate(){
+                        let col_index = order_col_index.get(&i).unwrap();  // 拿到实际的表中列下标
+                        let x = &row1[*col_index];  // row1_value
+                        let y = &row2[*col_index];  // row2_value
+                        match x.partial_cmp(y) {
+                            Some(Equal) => continue,
+                            Some(o) => return
+                                if *condition == Asc {o}
+                                else {o.reverse()},
+                            None => continue,
+                        }
+                    }
+                    Equal  // 其余情况认为相等
+                });
+                Ok(ResultSet::Scan { columns, rows })
+            },
+            _ => return Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
     }
 }
