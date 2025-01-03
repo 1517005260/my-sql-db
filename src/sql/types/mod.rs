@@ -28,6 +28,7 @@ impl Value {
             Expression::Consts(Consts::Integer(int)) => Self::Integer(int),
             Expression::Consts(Consts::Float(float)) => Self::Float(float),
             Expression::Consts(Consts::String(string)) => Self::String(string),
+            _ => unreachable!(),
         }
     }
 

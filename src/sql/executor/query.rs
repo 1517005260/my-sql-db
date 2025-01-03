@@ -31,6 +31,54 @@ impl<T:Transaction> Executor<T> for Scan{
     }
 }
 
+pub struct Projection<T: Transaction>{
+    source: Box<dyn Executor<T>>,
+    expressions: Vec<(Expression, Option<String>)>,
+}
+
+impl<T:Transaction> Projection<T>{
+    pub fn new(source: Box<dyn Executor<T>>, expressions: Vec<(Expression, Option<String>)>) -> Box<Self>{
+        Box::new(Self{ source, expressions })
+    }
+}
+
+impl<T:Transaction> Executor<T> for Projection<T> {
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        match self.source.execute(transaction){
+            Ok(ResultSet::Scan {columns, rows}) => {
+                // 处理投影逻辑，我们需要根据expressions构建新的“表”
+                let mut select_index = Vec::new(); // 选择的列的下标
+                let mut new_columns = Vec::new();  // 选择的列
+
+                for (expr, nick_name) in self.expressions{
+                    if let Expression::Field(col_name) = expr{
+                        // 找到col_name在原表中的下标
+                        let position = match columns.iter().position(|c| *c == col_name){
+                            Some(position) => position,
+                            None => return Err(Internal(format!("[Executor] Projection column {} does not exist", col_name)))
+                        };
+                        select_index.push(position);
+                        new_columns.push(if nick_name.is_some(){ nick_name.unwrap() } else { col_name});
+                    };
+                }
+
+                // 根据选择的列，对每行内容进行过滤
+                let mut new_rows = Vec::new();
+                for row in rows{
+                    let mut new_row = Vec::new();
+                    for i in select_index.iter(){
+                        new_row.push(row[*i].clone());
+                    }
+                    new_rows.push(new_row);
+                }
+
+                Ok(ResultSet::Scan { columns: new_columns, rows: new_rows })
+            },
+            _ => return Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
+    }
+}
+
 pub struct Order<T: Transaction>{
     scan: Box<dyn Executor<T>>,
     order_by: Vec<(String, OrderBy)>

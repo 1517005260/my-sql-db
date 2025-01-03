@@ -119,10 +119,14 @@ impl<'a> Parser<'a> {
         Ok(column)
     }
 
-    // 解析表达式，目前仅有常量
+    // 解析表达式，目前有常量和列名
     fn parse_expression(&mut self) -> Result<ast::Expression>{
         Ok(
             match self.next()? {
+                Token::Ident(ident) =>{
+                    // 列名
+                    ast::Expression::Field(ident)
+                },
                 Token::Number(n) =>{
                     // 分两种情况，如果这个token整个都是数字，则为整数
                     // 如果这个token段中包含小数点，则是浮点数
@@ -143,15 +147,16 @@ impl<'a> Parser<'a> {
 
     // 分类二：Select语句
     fn parse_select(&mut self) -> Result<Sentence>{
-        // 先只实现select *
-        self.expect_next_token_is(Token::Keyword(Keyword::Select))?;
-        self.expect_next_token_is(Token::Asterisk)?;
+        // 首先解析select的列信息
+        let selects = self.parse_select_condition()?;
+
         self.expect_next_token_is(Token::Keyword(Keyword::From))?;
 
         // 识别完关键字之后为表名
         let table_name = self.expect_next_is_ident()?;
         Ok(Sentence::Select {
             table_name,
+            select_condition: selects,
             order_by: self.parse_order_by_condition()?,
             limit: {
                 if self.next_if_is_token(Token::Keyword(Keyword::Limit)).is_some(){
@@ -256,6 +261,33 @@ impl<'a> Parser<'a> {
             table_name,
             condition: self.parse_where_condition()?,
         })
+    }
+
+    fn parse_select_condition(&mut self) -> Result<Vec<(Expression, Option<String>)>>{
+        self.expect_next_token_is(Token::Keyword(Keyword::Select))?;
+
+        let mut selects = Vec::new();
+        // 如果是select *
+        if self.next_if_is_token(Token::Asterisk).is_some(){
+            return Ok(selects);
+        }
+
+        // 处理多个select的列
+        loop{
+            let col_name = self.parse_expression()?;
+            // 查看是否有别名，比如 select user_name as a
+            let nick_name= match self.next_if_is_token(Token::Keyword(Keyword::As)) {
+                Some(_) => Some(self.expect_next_is_ident()?),
+                None => None,
+            };
+            selects.push((col_name, nick_name));
+            // 没有逗号，解析完毕
+            if self.next_if_is_token(Token::Comma).is_none(){
+                break;
+            }
+        }
+
+        Ok(selects)
     }
 
     fn parse_where_condition(&mut self) -> Result<Option<(String, Expression)>>{
@@ -434,6 +466,7 @@ mod tests{
             sentence,
             ast::Sentence::Select {
                 table_name: "tbl1".to_string(),
+                select_condition:vec![],
                 order_by: vec![],
                 limit: Some(Expression::Consts(Integer(10))),
                 offset: Some(Expression::Consts(Integer(20))),
@@ -446,6 +479,7 @@ mod tests{
             sentence,
             ast::Sentence::Select {
                 table_name: "tbl1".to_string(),
+                select_condition:vec![],
                 order_by: vec![
                     ("a".to_string(), Asc),
                     ("b".to_string(), Asc),
@@ -455,6 +489,28 @@ mod tests{
                 offset: None,
             }
         );
+
+        let sql = "select a as col1, b as col2, c from tbl1 order by a, b asc, c desc;";
+        let sentence = Parser::new(sql).parse()?;
+        assert_eq!(
+            sentence,
+            ast::Sentence::Select {
+                table_name: "tbl1".to_string(),
+                select_condition: vec![
+                    (Expression::Field("a".into()), Some("col1".into())),
+                    (Expression::Field("b".into()), Some("col2".into())),
+                    (Expression::Field("c".into()), None),
+                ],
+                order_by: vec![
+                    ("a".to_string(), Asc),
+                    ("b".to_string(), Asc),
+                    ("c".to_string(), Desc),
+                ],
+                limit: None,
+                offset: None,
+            }
+        );
+
         Ok(())
     }
 

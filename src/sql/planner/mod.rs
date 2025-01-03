@@ -46,6 +46,10 @@ pub enum Node{
         source: Box<Node>,
         offset: usize,
     },
+    Projection{
+        source: Box<Node>,
+        expressions: Vec<(Expression, Option<String>)>,
+    },
 }
 
 // 定义执行计划，执行计划的底层是不同执行节点
@@ -89,7 +93,7 @@ mod tests {
         );
         ";
         let sentence1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(sentence1)?;
+        let p1 = Plan::build(sentence1);
         println!("{:?}",p1);
 
         let sql2 = "
@@ -101,7 +105,7 @@ mod tests {
         );
         ";
         let sentence2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(sentence2)?;
+        let p2 = Plan::build(sentence2);
         assert_eq!(p1, p2);
 
         Ok(())

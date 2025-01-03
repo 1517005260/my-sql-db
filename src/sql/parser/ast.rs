@@ -13,9 +13,12 @@ pub struct Column{            // 列的各种属性
     pub is_primary_key: bool,       // 本列是否为主键
 }
 
+// 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
+// 更新：select的列名算作Expression
 #[derive(Debug,PartialEq,Clone)]
-pub enum Expression{        // 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
-    Consts(Consts)
+pub enum Expression{
+    Consts(Consts),
+    Field(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -55,6 +58,7 @@ pub enum Sentence{
     },
     Select{
         table_name: String,
+        select_condition: Vec<(Expression, Option<String>)>,  // 列名，可选的别名
         order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
         limit: Option<Expression>,
         offset: Option<Expression>,

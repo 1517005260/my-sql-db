@@ -50,7 +50,7 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {table_name, order_by, limit, offset} =>
+            Sentence::Select {table_name,select_condition, order_by, limit, offset} =>
                 {
                     let mut node = Node::Scan {table_name, filter:None};
                     // 如果有order by，那么这里就返回OrderBy节点而不是Scan节点
@@ -82,6 +82,15 @@ impl Planner {
                             },
                         }
                     }
+
+                    // projection
+                    if !select_condition.is_empty(){
+                        node = Node::Projection {
+                            source: Box::new(node),
+                            expressions: select_condition,
+                        }
+                    }
+
                     node
                 },
 
