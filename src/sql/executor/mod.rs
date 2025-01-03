@@ -5,7 +5,7 @@ mod query;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::mutation::{Delete, Insert, Update};
-use crate::sql::executor::query::{Order, Scan};
+use crate::sql::executor::query::{Limit, Offset, Order, Scan};
 use crate::sql::executor::schema::CreateTable;
 use crate::sql::planner::Node;
 use crate::sql::types::Row;
@@ -47,6 +47,8 @@ impl<T:Transaction + 'static> dyn Executor<T>{
                             columns),
             Node::Delete {table_name, scan} => Delete::new(table_name, Self::build(*scan)),
             Node::OrderBy {scan, order_by} => Order::new(Self::build(*scan), order_by),
+            Node::Limit {source, limit} => Limit::new(Self::build(*source), limit),
+            Node::Offset {source, offset} => Offset::new(Self::build(*source), offset),
         }
     }
 }

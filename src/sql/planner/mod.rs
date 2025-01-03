@@ -38,6 +38,14 @@ pub enum Node{
         scan: Box<Node>,
         order_by: Vec<(String, OrderBy)>,
     },
+    Limit{
+        source: Box<Node>,
+        limit: usize,
+    },
+    Offset{
+        source: Box<Node>,
+        offset: usize,
+    },
 }
 
 // 定义执行计划，执行计划的底层是不同执行节点
@@ -47,8 +55,8 @@ pub struct Plan(pub Node);  // 元素结构体，可以通过 let plan = Plan(no
 
 // 实现构建Plan的方法
 impl Plan{
-    pub fn build(sentence: Sentence) -> Self{
-        Planner::new().build(sentence)
+    pub fn build(sentence: Sentence) -> Result<Self>{
+        Ok(Planner::new().build(sentence)?)
     }
 
     // planner与executor交互，plan节点 -> 执行器结构体
@@ -81,7 +89,7 @@ mod tests {
         );
         ";
         let sentence1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(sentence1);
+        let p1 = Plan::build(sentence1)?;
         println!("{:?}",p1);
 
         let sql2 = "
@@ -93,7 +101,7 @@ mod tests {
         );
         ";
         let sentence2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(sentence2);
+        let p2 = Plan::build(sentence2)?;
         assert_eq!(p1, p2);
 
         Ok(())
@@ -103,7 +111,7 @@ mod tests {
     fn test_plan_insert() -> Result<()> {
         let sql1 = "insert into tbl1 values (1, 2, 3, 'a', true);";
         let sentence1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(sentence1);
+        let p1 = Plan::build(sentence1)?;
         assert_eq!(
             p1,
             Plan(Node::Insert {
@@ -121,7 +129,7 @@ mod tests {
 
         let sql2 = "insert into tbl2 (c1, c2, c3) values (3, 'a', true),(4, 'b', false);";
         let sentence2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(sentence2);
+        let p2 = Plan::build(sentence2)?;
         assert_eq!(
             p2,
             Plan(Node::Insert {
@@ -149,7 +157,7 @@ mod tests {
     fn test_plan_select() -> Result<()> {
         let sql = "select * from tbl1;";
         let sentence = Parser::new(sql).parse()?;
-        let p = Plan::build(sentence);
+        let p = Plan::build(sentence)?;
         assert_eq!(
             p,
             Plan(Node::Scan {

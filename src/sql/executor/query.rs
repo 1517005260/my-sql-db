@@ -80,3 +80,59 @@ impl<T:Transaction> Executor<T> for Order<T>{
         }
     }
 }
+
+pub struct Limit<T: Transaction>{
+    source: Box<dyn Executor<T>>,
+    limit: usize,
+}
+
+impl<T:Transaction> Limit<T> {
+    pub fn new(source: Box<dyn Executor<T>>, limit: usize) -> Box<Self>{
+        Box::new(Self{ source, limit })
+    }
+}
+
+impl<T:Transaction> Executor<T> for Limit<T>{
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        match self.source.execute(transaction){
+            Ok(ResultSet::Scan {columns, mut rows}) => {
+                // 对输出的rows截断即可
+                Ok(
+                    ResultSet::Scan {
+                        columns,
+                        rows: rows.into_iter().take(self.limit).collect(),
+                    }
+                )
+            },
+            _ => return Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
+    }
+}
+
+pub struct Offset<T: Transaction>{
+    source: Box<dyn Executor<T>>,
+    offset: usize,
+}
+
+impl<T:Transaction> Offset<T> {
+    pub fn new(source: Box<dyn Executor<T>>, offset: usize) -> Box<Self>{
+        Box::new(Self{ source, offset })
+    }
+}
+
+impl<T:Transaction> Executor<T> for Offset<T> {
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        match self.source.execute(transaction){
+            Ok(ResultSet::Scan {columns, mut rows}) => {
+                // 对输出rows跳过即可
+                Ok(
+                    ResultSet::Scan {
+                        columns,
+                        rows: rows.into_iter().skip(self.offset).collect(),
+                    }
+                )
+            },
+            _ => return Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
+    }
+}

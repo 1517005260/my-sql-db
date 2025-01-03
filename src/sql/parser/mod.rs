@@ -153,6 +153,20 @@ impl<'a> Parser<'a> {
         Ok(Sentence::Select {
             table_name,
             order_by: self.parse_order_by_condition()?,
+            limit: {
+                if self.next_if_is_token(Token::Keyword(Keyword::Limit)).is_some(){
+                    Some(self.parse_expression()?)
+                }else{
+                    None
+                }
+            },
+            offset:{
+                if self.next_if_is_token(Token::Keyword(Keyword::Offset)).is_some(){
+                    Some(self.parse_expression()?)
+                }else{
+                    None
+                }
+            },
         })
     }
 
@@ -328,6 +342,8 @@ impl<'a> Parser<'a> {
 mod tests{
     use super::*;
     use crate::{error::Result};
+    use crate::sql::parser::ast::Consts::Integer;
+    use crate::sql::parser::ast::OrderBy::{Asc, Desc};
 
     #[test]
     fn test_parser_create_table() -> Result<()> {
@@ -412,13 +428,15 @@ mod tests{
 
     #[test]
     fn test_parser_select() -> Result<()> {
-        let sql = "select * from tbl1;";
+        let sql = "select * from tbl1 limit 10 offset 20;";
         let sentence = Parser::new(sql).parse()?;
         assert_eq!(
             sentence,
             ast::Sentence::Select {
                 table_name: "tbl1".to_string(),
-                order_by: vec![],  // 没有排序条件
+                order_by: vec![],
+                limit: Some(Expression::Consts(Integer(10))),
+                offset: Some(Expression::Consts(Integer(20))),
             }
         );
 
@@ -429,13 +447,14 @@ mod tests{
             ast::Sentence::Select {
                 table_name: "tbl1".to_string(),
                 order_by: vec![
-                    ("a".to_string(), OrderBy::Asc),
-                    ("b".to_string(), OrderBy::Asc),
-                    ("c".to_string(), OrderBy::Desc),
+                    ("a".to_string(), Asc),
+                    ("b".to_string(), Asc),
+                    ("c".to_string(), Desc),
                 ],
+                limit: None,
+                offset: None,
             }
         );
-
         Ok(())
     }
 

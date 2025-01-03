@@ -64,7 +64,7 @@ impl<E:Engine + 'static> Session<E>{
                   let mut transaction = self.engine.begin()?;  // 开启事务
 
                   // 开始构建plan
-                  match Plan::build(sentence).    // 这里获得一个node
+                  match Plan::build(sentence)?.    // 这里获得一个node
                       execute(&mut transaction){
                       Ok(res) => {
                           transaction.commit()?;  // 成功，事务提交

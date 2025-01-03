@@ -3,6 +3,7 @@ use crate::sql::planner::{Node, Plan};
 use crate::sql::schema;
 use crate::sql::schema::Table;
 use crate::sql::types::Value;
+use crate::error::{Result, Error};
 
 pub struct Planner;  // 辅助Plan的结构体
 
@@ -11,13 +12,13 @@ impl Planner {
         Self
     }
 
-    pub fn build(&mut self, sentence: Sentence) -> Plan{
-        Plan(self.build_sentence(sentence))
+    pub fn build(&mut self, sentence: Sentence) -> Result<Plan>{
+        Ok(Plan(self.build_sentence(sentence)?))
     }
 
     // 将parser得到的sql-sentence转换为node节点
-    fn build_sentence(&mut self, sentence: Sentence) -> Node{
-        match sentence {
+    fn build_sentence(&mut self, sentence: Sentence) -> Result<Node>{
+        Ok(match sentence {
             Sentence::CreateTable {name,columns} =>
                 Node::CreateTable {
                     schema:Table{
@@ -49,19 +50,39 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {table_name, order_by} =>
+            Sentence::Select {table_name, order_by, limit, offset} =>
                 {
-                    let scan_node = Node::Scan {table_name, filter:None};
+                    let mut node = Node::Scan {table_name, filter:None};
                     // 如果有order by，那么这里就返回OrderBy节点而不是Scan节点
                     if !order_by.is_empty() {
-                        let node = Node::OrderBy {
-                            scan: Box::new(scan_node),
+                        node = Node::OrderBy {
+                            scan: Box::new(node),
                             order_by,
-                        };
-                        node
-                    }else {
-                        scan_node
+                        }; // 更新 scan_node 为 order_by_node
                     }
+
+                    // offset
+                    if let Some(expr) = offset {
+                        node = Node::Offset {
+                            source: Box::new(node),
+                            offset: match Value::from_expression_to_value(expr) {
+                                Value::Integer(i) => i as usize,
+                                _ => return Err(Error::Internal("invalid offset".into())),
+                            },
+                        }
+                    }
+
+                    // limit
+                    if let Some(expr) = limit {
+                        node = Node::Limit {
+                            source: Box::new(node),
+                            limit: match Value::from_expression_to_value(expr) {
+                                Value::Integer(i) => i as usize,
+                                _ => return Err(Error::Internal("invalid offset".into())),
+                            },
+                        }
+                    }
+                    node
                 },
 
             Sentence::Update {table_name, columns, condition} =>
@@ -77,6 +98,6 @@ impl Planner {
                     scan: Box::new(Node::Scan {table_name, filter: condition})
                 },
 
-            }
+            })
         }
 }

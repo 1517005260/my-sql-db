@@ -56,6 +56,8 @@ pub enum Sentence{
     Select{
         table_name: String,
         order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
+        limit: Option<Expression>,
+        offset: Option<Expression>,
     },
     Update{
         table_name: String,
