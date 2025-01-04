@@ -21,6 +21,28 @@ pub enum Expression{
     Field(String),
 }
 
+// join的类型定义
+#[derive(Debug,PartialEq,Clone)]
+pub enum JoinType{
+    Cross,
+    Inner,
+    Left,
+    Right,
+}
+
+// from_item的定义，可以是表或者表的连接
+#[derive(Debug,PartialEq,Clone)]
+pub enum FromItem{
+    Table{
+        name: String,
+    },
+    Join{
+        left: Box<FromItem>,  // 左表
+        right: Box<FromItem>, // 右表
+        join_type: JoinType,  // 连接类型
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Consts{
     Null,
@@ -57,8 +79,8 @@ pub enum Sentence{
         values: Vec<Vec<Expression>>,   // 插入数据，是个二维数组
     },
     Select{
-        table_name: String,
         select_condition: Vec<(Expression, Option<String>)>,  // 列名，可选的别名
+        from_item: FromItem,
         order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
         limit: Option<Expression>,
         offset: Option<Expression>,

@@ -1,9 +1,11 @@
 mod schema;
 mod mutation;
 mod query;
+mod join;
 
 use crate::error::Result;
 use crate::sql::engine::Transaction;
+use crate::sql::executor::join::NestedLoopJoin;
 use crate::sql::executor::mutation::{Delete, Insert, Update};
 use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection};
 use crate::sql::executor::schema::CreateTable;
@@ -50,6 +52,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::Limit {source, limit} => Limit::new(Self::build(*source), limit),
             Node::Offset {source, offset} => Offset::new(Self::build(*source), offset),
             Node::Projection {source, expressions} => Projection::new(Self::build(*source), expressions),
+            Node::NestedLoopJoin { left, right} => NestedLoopJoin::new(Self::build(*left), Self::build(*right)),
         }
     }
 }

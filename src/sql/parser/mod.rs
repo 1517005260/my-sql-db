@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::iter::Peekable;
 use crate::sql::parser::lexer::{Keyword, Lexer, Token};
 use crate::error::{Result, Error};
-use crate::sql::parser::ast::{Column, Expression, OrderBy, Sentence};
+use crate::sql::parser::ast::{Column, Expression, FromItem, JoinType, OrderBy, Sentence};
+use crate::sql::parser::ast::FromItem::{Join, Table};
+use crate::sql::parser::ast::JoinType::Cross;
 use crate::sql::types::DataType;
 
 mod lexer;  // lexer模块仅parser文件内部可使用
@@ -147,16 +149,9 @@ impl<'a> Parser<'a> {
 
     // 分类二：Select语句
     fn parse_select(&mut self) -> Result<Sentence>{
-        // 首先解析select的列信息
-        let selects = self.parse_select_condition()?;
-
-        self.expect_next_token_is(Token::Keyword(Keyword::From))?;
-
-        // 识别完关键字之后为表名
-        let table_name = self.expect_next_is_ident()?;
         Ok(Sentence::Select {
-            table_name,
-            select_condition: selects,
+            select_condition: self.parse_select_condition()?,
+            from_item: self.parse_from_condition()?,
             order_by: self.parse_order_by_condition()?,
             limit: {
                 if self.next_if_is_token(Token::Keyword(Keyword::Limit)).is_some(){
@@ -288,6 +283,39 @@ impl<'a> Parser<'a> {
         }
 
         Ok(selects)
+    }
+
+    fn parse_from_condition(&mut self) -> Result<FromItem>{
+        self.expect_next_token_is(Token::Keyword(Keyword::From))?;
+
+        // 无论是否是join，肯定会有第一个表名
+        let mut from_item = self.parse_table_name()?;
+
+        // 看后面有无join关键字
+        // 并且注意，可能会有多表连接，所以用while循环
+        while let Some(join_type) = self.parse_join_type()?{
+            let left = Box::new(from_item);  // 原来的第一个表名变成了左表
+            let right = Box::new(self.parse_table_name()?);
+            from_item = Join{join_type, left, right};
+        }
+        Ok(from_item)
+    }
+
+    fn parse_table_name(&mut self) -> Result<FromItem>{
+        Ok(
+            Table{
+                name: self.expect_next_is_ident()?,
+            }
+        )
+    }
+
+    fn parse_join_type(&mut self) -> Result<Option<JoinType>>{
+        if self.next_if_is_token(Token::Keyword(Keyword::Cross)).is_some(){
+            // 有Cross这个关键字，那么后面一定要跟Join关键字
+            self.expect_next_token_is(Token::Keyword(Keyword::Join))?;
+            return Ok(Some(Cross));
+        }
+        Ok(None)
     }
 
     fn parse_where_condition(&mut self) -> Result<Option<(String, Expression)>>{
@@ -465,8 +493,8 @@ mod tests{
         assert_eq!(
             sentence,
             ast::Sentence::Select {
-                table_name: "tbl1".to_string(),
                 select_condition:vec![],
+                from_item: Table { name:"tbl1".into() },
                 order_by: vec![],
                 limit: Some(Expression::Consts(Integer(10))),
                 offset: Some(Expression::Consts(Integer(20))),
@@ -478,8 +506,8 @@ mod tests{
         assert_eq!(
             sentence,
             ast::Sentence::Select {
-                table_name: "tbl1".to_string(),
                 select_condition:vec![],
+                from_item: Table { name:"tbl1".into() },
                 order_by: vec![
                     ("a".to_string(), Asc),
                     ("b".to_string(), Asc),
@@ -495,17 +523,44 @@ mod tests{
         assert_eq!(
             sentence,
             ast::Sentence::Select {
-                table_name: "tbl1".to_string(),
                 select_condition: vec![
                     (Expression::Field("a".into()), Some("col1".into())),
                     (Expression::Field("b".into()), Some("col2".into())),
                     (Expression::Field("c".into()), None),
                 ],
+                from_item: Table { name:"tbl1".into() },
                 order_by: vec![
                     ("a".to_string(), Asc),
                     ("b".to_string(), Asc),
                     ("c".to_string(), Desc),
                 ],
+                limit: None,
+                offset: None,
+            }
+        );
+
+        let sql = "select * from tbl1 cross join tbl2 cross join tbl3;";
+        let sentence = Parser::new(sql).parse()?;
+        assert_eq!(
+            sentence,
+            ast::Sentence::Select {
+                select_condition: vec![],
+                from_item: ast::FromItem::Join {
+                    left: Box::new(ast::FromItem::Join {
+                        left: Box::new(ast::FromItem::Table {
+                            name: "tbl1".into()
+                        }),
+                        right: Box::new(ast::FromItem::Table {
+                            name: "tbl2".into()
+                        }),
+                        join_type: ast::JoinType::Cross
+                    }),
+                    right: Box::new(ast::FromItem::Table {
+                        name: "tbl3".into()
+                    }),
+                    join_type: ast::JoinType::Cross
+                },
+                order_by: vec![],
                 limit: None,
                 offset: None,
             }

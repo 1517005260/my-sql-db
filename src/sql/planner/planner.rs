@@ -1,9 +1,10 @@
-use crate::sql::parser::ast::Sentence;
+use crate::sql::parser::ast::{FromItem, Sentence};
 use crate::sql::planner::{Node, Plan};
 use crate::sql::schema;
 use crate::sql::schema::Table;
 use crate::sql::types::Value;
 use crate::error::{Result, Error};
+use crate::sql::parser::ast;
 
 pub struct Planner;  // 辅助Plan的结构体
 
@@ -50,9 +51,9 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {table_name,select_condition, order_by, limit, offset} =>
+            Sentence::Select {select_condition,from_item, order_by, limit, offset} =>
                 {
-                    let mut node = Node::Scan {table_name, filter:None};
+                    let mut node = self.build_from_item(from_item)?;
                     // 如果有order by，那么这里就返回OrderBy节点而不是Scan节点
                     if !order_by.is_empty() {
                         node = Node::OrderBy {
@@ -109,4 +110,21 @@ impl Planner {
 
             })
         }
+
+    // 将from_item变成plan_node
+    fn build_from_item(&mut self, item: FromItem) -> Result<Node>{
+        let node = match item {
+            FromItem::Table { name } => Node::Scan {table_name:name, filter: None},
+            FromItem::Join { left, right, join_type } => {
+                match join_type {
+                    ast::JoinType::Cross => Node::NestedLoopJoin {
+                        left: Box::new(self.build_from_item(*left)?),
+                        right: Box::new(self.build_from_item(*right)?)
+                    },
+                    _ => todo!()
+                }
+            },
+        };
+        Ok(node)
+    }
 }
