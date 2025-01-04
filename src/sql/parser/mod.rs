@@ -4,7 +4,7 @@ use crate::sql::parser::lexer::{Keyword, Lexer, Token};
 use crate::error::{Result, Error};
 use crate::sql::parser::ast::{Column, Expression, FromItem, JoinType, OrderBy, Sentence};
 use crate::sql::parser::ast::FromItem::{Join, Table};
-use crate::sql::parser::ast::JoinType::Cross;
+use crate::sql::parser::ast::JoinType::{Cross, Inner, Left, Right};
 use crate::sql::types::DataType;
 
 mod lexer;  // lexer模块仅parser文件内部可使用
@@ -296,7 +296,28 @@ impl<'a> Parser<'a> {
         while let Some(join_type) = self.parse_join_type()?{
             let left = Box::new(from_item);  // 原来的第一个表名变成了左表
             let right = Box::new(self.parse_table_name()?);
-            from_item = Join{join_type, left, right};
+
+            // 如果不是Cross Join，需要看连接条件
+            let condition = match join_type {
+                Cross => None,
+                _ => {
+                    // select * from A join B on A.a = B.b
+                    self.expect_next_token_is(Token::Keyword(Keyword::On))?;
+                    let left_col = self.parse_expression()?;
+                    self.expect_next_token_is(Token::Equal)?;
+                    let right_col = self.parse_expression()?;
+
+                    let (left, right) = match join_type {
+                        Right => (right_col, left_col),
+                        _=> (left_col, right_col),
+                    };
+
+                    let condition = ast::Operation::Equal(Box::new(left), Box::new(right));
+                    Some(Expression::Operation(condition))
+                }
+            };
+
+            from_item = Join{join_type, left, right, condition};
         }
         Ok(from_item)
     }
@@ -313,9 +334,18 @@ impl<'a> Parser<'a> {
         if self.next_if_is_token(Token::Keyword(Keyword::Cross)).is_some(){
             // 有Cross这个关键字，那么后面一定要跟Join关键字
             self.expect_next_token_is(Token::Keyword(Keyword::Join))?;
-            return Ok(Some(Cross));
+            Ok(Some(Cross))
+        }else if self.next_if_is_token(Token::Keyword(Keyword::Join)).is_some() {
+            Ok(Some(Inner))
+        }else if self.next_if_is_token(Token::Keyword(Keyword::Left)).is_some() {
+            self.expect_next_token_is(Token::Keyword(Keyword::Join))?;
+            Ok(Some(Left))
+        }else if self.next_if_is_token(Token::Keyword(Keyword::Right)).is_some() {
+            self.expect_next_token_is(Token::Keyword(Keyword::Join))?;
+            Ok(Some(Right))
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 
     fn parse_where_condition(&mut self) -> Result<Option<(String, Expression)>>{
@@ -553,12 +583,14 @@ mod tests{
                         right: Box::new(ast::FromItem::Table {
                             name: "tbl2".into()
                         }),
-                        join_type: ast::JoinType::Cross
+                        join_type: ast::JoinType::Cross,
+                        condition: None,
                     }),
                     right: Box::new(ast::FromItem::Table {
                         name: "tbl3".into()
                     }),
-                    join_type: ast::JoinType::Cross
+                    join_type: ast::JoinType::Cross,
+                    condition: None,
                 },
                 order_by: vec![],
                 limit: None,

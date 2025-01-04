@@ -1,4 +1,4 @@
-use crate::sql::parser::ast::{FromItem, Sentence};
+use crate::sql::parser::ast::{FromItem, JoinType, Sentence};
 use crate::sql::planner::{Node, Plan};
 use crate::sql::schema;
 use crate::sql::schema::Table;
@@ -115,13 +115,23 @@ impl Planner {
     fn build_from_item(&mut self, item: FromItem) -> Result<Node>{
         let node = match item {
             FromItem::Table { name } => Node::Scan {table_name:name, filter: None},
-            FromItem::Join { left, right, join_type } => {
-                match join_type {
-                    ast::JoinType::Cross => Node::NestedLoopJoin {
-                        left: Box::new(self.build_from_item(*left)?),
-                        right: Box::new(self.build_from_item(*right)?)
-                    },
-                    _ => todo!()
+            FromItem::Join { left, right, join_type, condition } => {
+                // 优化： a right join b == b left join a， 这样一套逻辑就可以复用
+                let (left, right) = match join_type {
+                    JoinType::Right => (right, left),
+                    _ => (left, right),
+                };
+
+                let outer = match join_type  {
+                    JoinType::Cross | JoinType::Inner => false,
+                    _ => true,
+                };
+
+                Node::NestedLoopJoin {
+                    left: Box::new(self.build_from_item(*left)?),
+                    right: Box::new(self.build_from_item(*right)?),
+                    condition,
+                    outer
                 }
             },
         };

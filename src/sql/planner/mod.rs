@@ -53,6 +53,8 @@ pub enum Node{
     NestedLoopJoin{  // 嵌套循环节点，时间复杂度O(m * n)
         left: Box<Node>,
         right: Box<Node>,
+        condition: Option<Expression>,
+        outer: bool,
     },
 }
 

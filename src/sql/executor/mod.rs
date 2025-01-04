@@ -52,7 +52,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::Limit {source, limit} => Limit::new(Self::build(*source), limit),
             Node::Offset {source, offset} => Offset::new(Self::build(*source), offset),
             Node::Projection {source, expressions} => Projection::new(Self::build(*source), expressions),
-            Node::NestedLoopJoin { left, right} => NestedLoopJoin::new(Self::build(*left), Self::build(*right)),
+            Node::NestedLoopJoin { left, right, condition, outer} => NestedLoopJoin::new(Self::build(*left), Self::build(*right), condition, outer),
         }
     }
 }

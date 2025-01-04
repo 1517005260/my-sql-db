@@ -15,10 +15,12 @@ pub struct Column{            // 列的各种属性
 
 // 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
 // 更新：select的列名算作Expression
+// 更新：join的条件——列相等算作Expression
 #[derive(Debug,PartialEq,Clone)]
 pub enum Expression{
     Consts(Consts),
     Field(String),
+    Operation(Operation),
 }
 
 // join的类型定义
@@ -40,6 +42,7 @@ pub enum FromItem{
         left: Box<FromItem>,  // 左表
         right: Box<FromItem>, // 右表
         join_type: JoinType,  // 连接类型
+        condition: Option<Expression>, // 连接条件
     }
 }
 
@@ -57,6 +60,12 @@ pub enum Consts{
 pub enum OrderBy{
     Asc,
     Desc,
+}
+
+// 列相等语法
+#[derive(Debug, PartialEq, Clone)]
+pub enum Operation{
+    Equal(Box<Expression>, Box<Expression>),
 }
 
 // 定义 Consts -> Expression 的类型转换
