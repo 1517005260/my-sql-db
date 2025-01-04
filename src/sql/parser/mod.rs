@@ -307,12 +307,12 @@ impl<'a> Parser<'a> {
                     self.expect_next_token_is(Token::Equal)?;
                     let right_col = self.parse_expression()?;
 
-                    let (left, right) = match join_type {
+                    let (l, r) = match join_type {
                         Right => (right_col, left_col),
                         _=> (left_col, right_col),
                     };
 
-                    let condition = ast::Operation::Equal(Box::new(left), Box::new(right));
+                    let condition = ast::Operation::Equal(Box::new(l), Box::new(r));
                     Some(Expression::Operation(condition))
                 }
             };

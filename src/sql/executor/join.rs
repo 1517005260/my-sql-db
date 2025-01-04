@@ -1,4 +1,3 @@
-use std::process::Output;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
 use crate::error::{Result};
@@ -73,8 +72,8 @@ impl<T:Transaction> Executor<T> for NestedLoopJoin<T>{
 
 // 解析表达式，看列是否相等，满足Join条件
 fn parse_expression(expr: &Expression,
-                    left_cols: &Vec<String>, left_rows: &Vec<Value>,
-                    right_cols: &Vec<String>, right_rows: &Vec<Value>) -> Result<Value> {
+                    left_cols: &Vec<String>, left_row: &Vec<Value>,
+                    right_cols: &Vec<String>, right_row: &Vec<Value>) -> Result<Value> {
     match expr {
         Expression::Field(col_name) => {
             // 根据列名，取对应行的数据
@@ -82,13 +81,13 @@ fn parse_expression(expr: &Expression,
                 Some(pos) => pos,
                 None => return Err(Internal(format!("[Executor] Column {} does not exist", col_name))),
             };
-            Ok(left_rows[pos].clone())
+            Ok(left_row[pos].clone())
         },
         Expression::Operation(operation) =>{
             match operation {
                 ast::Operation::Equal(left_expr, right_expr) =>{
-                    let left_value = parse_expression(&left_expr, left_cols, left_rows, right_cols, right_rows)?;
-                    let right_value = parse_expression(&right_expr, right_cols, right_rows, left_cols, left_rows)?;
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
 
                     // 取到两张表同名列的值，如果相等则可以连接
                     Ok(match (left_value, right_value) {

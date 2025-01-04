@@ -131,7 +131,7 @@ impl Planner {
                     left: Box::new(self.build_from_item(*left)?),
                     right: Box::new(self.build_from_item(*right)?),
                     condition,
-                    outer
+                    outer,
                 }
             },
         };
