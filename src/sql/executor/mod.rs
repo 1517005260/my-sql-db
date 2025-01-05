@@ -2,9 +2,12 @@ mod schema;
 mod mutation;
 mod query;
 mod join;
+mod aggregate;
+mod calculate;
 
 use crate::error::Result;
 use crate::sql::engine::Transaction;
+use crate::sql::executor::aggregate::Aggregate;
 use crate::sql::executor::join::NestedLoopJoin;
 use crate::sql::executor::mutation::{Delete, Insert, Update};
 use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection};
@@ -53,6 +56,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::Offset {source, offset} => Offset::new(Self::build(*source), offset),
             Node::Projection {source, expressions} => Projection::new(Self::build(*source), expressions),
             Node::NestedLoopJoin { left, right, condition, outer} => NestedLoopJoin::new(Self::build(*left), Self::build(*right), condition, outer),
+            Node::Aggregate { source, expression} => Aggregate::new(Self::build(*source), expression),
         }
     }
 }

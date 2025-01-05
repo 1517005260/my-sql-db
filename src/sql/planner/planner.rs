@@ -53,7 +53,27 @@ impl Planner {
 
             Sentence::Select {select_condition,from_item, order_by, limit, offset} =>
                 {
+                    // from
                     let mut node = self.build_from_item(from_item)?;
+
+                    // agg聚集函数
+                    let mut has_agg = false;
+                    if !select_condition.is_empty(){
+                        for (expr, _) in select_condition.iter(){
+                            // 判断expr是否是聚集函数
+                            if let ast::Expression::Function(_,_) = expr{
+                                has_agg = true;
+                                break;
+                            }
+                        }
+                        if has_agg{
+                            node = Node::Aggregate {
+                                source: Box::new(node),
+                                expression: select_condition.clone(),
+                            }
+                        }
+                    }
+
                     // 如果有order by，那么这里就返回OrderBy节点而不是Scan节点
                     if !order_by.is_empty() {
                         node = Node::OrderBy {
@@ -85,7 +105,7 @@ impl Planner {
                     }
 
                     // projection
-                    if !select_condition.is_empty(){
+                    if !select_condition.is_empty() && has_agg == false{
                         node = Node::Projection {
                             source: Box::new(node),
                             expressions: select_condition,

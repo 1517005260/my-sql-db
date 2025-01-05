@@ -121,30 +121,36 @@ impl<'a> Parser<'a> {
         Ok(column)
     }
 
-    // 解析表达式，目前有常量和列名
-    fn parse_expression(&mut self) -> Result<ast::Expression>{
-        Ok(
-            match self.next()? {
-                Token::Ident(ident) =>{
-                    // 列名
-                    ast::Expression::Field(ident)
-                },
-                Token::Number(n) =>{
-                    // 分两种情况，如果这个token整个都是数字，则为整数
-                    // 如果这个token段中包含小数点，则是浮点数
-                    if n.chars().all(|c| c.is_ascii_digit()){
-                        ast::Consts::Integer(n.parse()?).into()  // into() 将 Consts -> Expression
-                    }else{
-                        ast::Consts::Float(n.parse()?).into()
-                    }
-                },
-                Token::String(s)=> ast::Consts::String(s).into(),
-                Token::Keyword(Keyword::True) => ast::Consts::Boolean(true).into(),
-                Token::Keyword(Keyword::False) => ast::Consts::Boolean(false).into(),
-                Token::Keyword(Keyword::Null) => ast::Consts::Null.into(),
-                token => return Err(Error::Parse(format!("[Parser] Unexpected expression token {}",token))),
-            }
-        )
+    // 解析表达式
+    fn parse_expression(&mut self) -> Result<Expression>{
+        let expr =match self.next()? {
+            Token::Ident(ident) =>{  // 解析select的列，或者聚集函数（count(col_name)）
+                if self.next_if_is_token(Token::OpenParen).is_some(){
+                    // 情况1：ident后面跟了个括号，判断为聚集函数
+                    let col_name = self.expect_next_is_ident()?;
+                    self.expect_next_token_is(Token::CloseParen)?;
+                    Expression::Function(ident.clone(), col_name)
+                }else {
+                    // 情况2：ident后面什么都没有，判断为列名，直接返回列名即可
+                    Expression::Field(ident)
+                }
+            },
+            Token::Number(n) =>{
+                // 分两种情况，如果这个token整个都是数字，则为整数
+                // 如果这个token段中包含小数点，则是浮点数
+                if n.chars().all(|c| c.is_ascii_digit()){
+                    ast::Consts::Integer(n.parse()?).into()  // into() 将 Consts -> Expression
+                }else{
+                    ast::Consts::Float(n.parse()?).into()
+                }
+            },
+            Token::String(s)=> ast::Consts::String(s).into(),
+            Token::Keyword(Keyword::True) => ast::Consts::Boolean(true).into(),
+            Token::Keyword(Keyword::False) => ast::Consts::Boolean(false).into(),
+            Token::Keyword(Keyword::Null) => ast::Consts::Null.into(),
+            token => return Err(Error::Parse(format!("[Parser] Unexpected expression token {}",token))),
+        };
+        Ok(expr)
     }
 
     // 分类二：Select语句
@@ -591,6 +597,25 @@ mod tests{
                     }),
                     join_type: ast::JoinType::Cross,
                     condition: None,
+                },
+                order_by: vec![],
+                limit: None,
+                offset: None,
+            }
+        );
+
+        let sql = "select count(a), min(b), max(c) from tbl1;";
+        let sentence = Parser::new(sql).parse()?;
+        assert_eq!(
+            sentence,
+            ast::Sentence::Select {
+                select_condition: vec![
+                    (ast::Expression::Function("count".into(), "a".into()), None),
+                    (ast::Expression::Function("min".into(), "b".into()), None),
+                    (ast::Expression::Function("max".into(), "c".into()), None),
+                ],
+                from_item: ast::FromItem::Table {
+                    name: "tbl1".into()
                 },
                 order_by: vec![],
                 limit: None,

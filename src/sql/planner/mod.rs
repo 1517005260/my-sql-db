@@ -56,6 +56,10 @@ pub enum Node{
         condition: Option<Expression>,
         outer: bool,
     },
+    Aggregate{  // 聚集函数节点
+        source: Box<Node>,
+        expression: Vec<(Expression, Option<String>)>,  // Function, 别名
+    },
 }
 
 // 定义执行计划，执行计划的底层是不同执行节点

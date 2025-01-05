@@ -16,11 +16,13 @@ pub struct Column{            // 列的各种属性
 // 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
 // 更新：select的列名算作Expression
 // 更新：join的条件——列相等算作Expression
+// 更新：聚集函数算作表达式
 #[derive(Debug,PartialEq,Clone)]
 pub enum Expression{
     Consts(Consts),
     Field(String),
     Operation(Operation),
+    Function(String, String),
 }
 
 // join的类型定义
