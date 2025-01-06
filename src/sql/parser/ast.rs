@@ -92,6 +92,7 @@ pub enum Sentence{
     Select{
         select_condition: Vec<(Expression, Option<String>)>,  // 列名，可选的别名
         from_item: FromItem,
+        group_by: Option<Expression>,
         order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
         limit: Option<Expression>,
         offset: Option<Expression>,

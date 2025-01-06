@@ -59,6 +59,7 @@ pub enum Node{
     Aggregate{  // 聚集函数节点
         source: Box<Node>,
         expression: Vec<(Expression, Option<String>)>,  // Function, 别名
+        group_by: Option<Expression>,
     },
 }
 

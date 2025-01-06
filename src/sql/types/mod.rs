@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use serde::{Deserialize, Serialize};
 use crate::sql::parser::ast::{Consts, Expression};
 
@@ -75,5 +76,34 @@ impl PartialOrd for Value {
         }
     }
 }
+
+// 使得Value类型可以作为HashMap的Key
+impl Hash for Value {
+    // 基础的数据类型其实都已经有hash的系统自带实现，这里我们简单调用即可
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Null => state.write_u8(0),  // 唯一标识防止hash冲突
+            // 即先写入一个唯一标识，再写入它hash后的值，防止不同类型的值产生相同的哈希值
+            Value::Boolean(v) => {
+                state.write_u8(1);
+                v.hash(state);
+            }
+            Value::Integer(v) => {
+                state.write_u8(2);
+                v.hash(state);
+            }
+            Value::Float(v) => {
+                state.write_u8(3);
+                v.to_be_bytes().hash(state);   // float本身没有实现hash，需要先转为二进制
+            }
+            Value::String(v) => {
+                state.write_u8(4);
+                v.hash(state);
+            }
+        }
+    }
+}
+
+impl Eq for Value {}
 
 pub type Row = Vec<Value>;

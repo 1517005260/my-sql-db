@@ -51,7 +51,7 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {select_condition,from_item, order_by, limit, offset} =>
+            Sentence::Select {select_condition,from_item,group_by , order_by, limit, offset} =>
                 {
                     // from
                     let mut node = self.build_from_item(from_item)?;
@@ -66,10 +66,16 @@ impl Planner {
                                 break;
                             }
                         }
+
+                        if group_by.is_some(){
+                            has_agg = true;
+                        }
+
                         if has_agg{
                             node = Node::Aggregate {
                                 source: Box::new(node),
                                 expression: select_condition.clone(),
+                                group_by,
                             }
                         }
                     }

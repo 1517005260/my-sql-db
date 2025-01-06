@@ -56,7 +56,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::Offset {source, offset} => Offset::new(Self::build(*source), offset),
             Node::Projection {source, expressions} => Projection::new(Self::build(*source), expressions),
             Node::NestedLoopJoin { left, right, condition, outer} => NestedLoopJoin::new(Self::build(*left), Self::build(*right), condition, outer),
-            Node::Aggregate { source, expression} => Aggregate::new(Self::build(*source), expression),
+            Node::Aggregate { source, expression, group_by} => Aggregate::new(Self::build(*source), expression, group_by),
         }
     }
 }
