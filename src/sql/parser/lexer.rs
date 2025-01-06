@@ -21,6 +21,11 @@ pub enum Token {
     Minus,              // -
     Slash,              // /
     Equal,              // =
+    Greater,            // >
+    GreaterEqual,       // >=
+    Less,               // <
+    LessEqual,          // <=
+    NotEqual,           // !=
 }
 
 impl Display for Token {
@@ -39,6 +44,11 @@ impl Display for Token {
             Token::Minus => "-",
             Token::Slash => "/",
             Token::Equal => "=",
+            Token::Greater => ">",
+            Token::GreaterEqual => ">=",
+            Token::Less => "<",
+            Token::LessEqual => "<=",
+            Token::NotEqual => "!=",
         })
     }
 }
@@ -85,6 +95,7 @@ pub enum Keyword {
     Right,
     On,
     Group,
+    Having,
 }
 
 // word -> Keyword
@@ -132,6 +143,7 @@ impl Keyword {
                 "RIGHT" => Keyword::Right,
                 "ON" => Keyword::On,
                 "GROUP" => Keyword::Group,
+                "HAVING" => Keyword::Having,
                 _ => return None,
             }
         )
@@ -181,6 +193,7 @@ impl Keyword {
             Keyword::Right => "RIGHT",
             Keyword::On => "ON",
             Keyword::Group => "GROUP",
+            Keyword::Having => "HAVING",
         }
     }
 }
@@ -297,18 +310,48 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_symbol(&mut self) -> Option<Token> {
-        self.next_if_token(|c| match c{
-            '*' => Some(Token::Asterisk),
-            '(' => Some(Token::OpenParen),
-            ')' => Some(Token::CloseParen),
-            ',' => Some(Token::Comma),
-            ';' => Some(Token::Semicolon),
-            '+' => Some(Token::Plus),
-            '-' => Some(Token::Minus),
-            '/' => Some(Token::Slash),
-            '=' => Some(Token::Equal),
-            _ => None,
-        })
+        match self.iter.peek()? {
+            '>' => {
+                self.iter.next(); // 消费 '>'
+                if self.iter.peek() == Some(&'=') {
+                    self.iter.next(); // 消费 '='
+                    Some(Token::GreaterEqual)
+                } else {
+                    Some(Token::Greater)
+                }
+            },
+            '<' => {
+                self.iter.next(); // 消费 '<'
+                if self.iter.peek() == Some(&'=') {
+                    self.iter.next(); // 消费 '='
+                    Some(Token::LessEqual)
+                } else {
+                    Some(Token::Less)
+                }
+            },
+            '!' => {
+                self.iter.next();
+                if self.iter.peek() == Some(&'=') {
+                    self.iter.next();
+                    Some(Token::NotEqual)
+                }else{
+                    None
+                }
+            },
+            _ => self.next_if_token(|c|
+                match c {
+                '*' => Some(Token::Asterisk),
+                '(' => Some(Token::OpenParen),
+                ')' => Some(Token::CloseParen),
+                ',' => Some(Token::Comma),
+                ';' => Some(Token::Semicolon),
+                '+' => Some(Token::Plus),
+                '-' => Some(Token::Minus),
+                '/' => Some(Token::Slash),
+                '=' => Some(Token::Equal),
+                _ => None,
+            })
+        }
     }
 }
 

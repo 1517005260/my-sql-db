@@ -2,8 +2,7 @@ use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
 use crate::error::{Result};
 use crate::error::Error::Internal;
-use crate::sql::parser::ast;
-use crate::sql::parser::ast::Expression;
+use crate::sql::parser::ast::{parse_expression, Expression};
 use crate::sql::types::Value;
 
 pub struct NestedLoopJoin<T:Transaction>{
@@ -67,43 +66,5 @@ impl<T:Transaction> Executor<T> for NestedLoopJoin<T>{
         }
 
         Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string()))
-    }
-}
-
-// 解析表达式，看列是否相等，满足Join条件
-fn parse_expression(expr: &Expression,
-                    left_cols: &Vec<String>, left_row: &Vec<Value>,
-                    right_cols: &Vec<String>, right_row: &Vec<Value>) -> Result<Value> {
-    match expr {
-        Expression::Field(col_name) => {
-            // 根据列名，取对应行的数据
-            let pos = match left_cols.iter().position(|col| *col == *col_name){
-                Some(pos) => pos,
-                None => return Err(Internal(format!("[Executor] Column {} does not exist", col_name))),
-            };
-            Ok(left_row[pos].clone())
-        },
-        Expression::Operation(operation) =>{
-            match operation {
-                ast::Operation::Equal(left_expr, right_expr) =>{
-                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
-                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
-
-                    // 取到两张表同名列的值，如果相等则可以连接
-                    Ok(match (left_value, right_value) {
-                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l == r),
-                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l == r),
-                        (Value::Integer(l), Value::Float(r)) => Value::Boolean(l as f64 == r),
-                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l == r as f64),
-                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l == r),
-                        (Value::String(l), Value::String(r)) => Value::Boolean(l == r),
-                        (Value::Null, _) => Value::Null,
-                        (_, Value::Null) => Value::Null,
-                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
-                    })
-                }
-            }
-        },
-        _ => return Err(Internal(format!("[Executor] Unexpected Expression {:?}", expr)))
     }
 }

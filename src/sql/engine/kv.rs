@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::sql::engine::{Engine, Transaction};
-use crate::sql::parser::ast::Expression;
+use crate::sql::parser::ast::{parse_expression, Expression};
 use crate::sql::schema::Table;
 use crate::sql::types::{Row, Value};
 use crate::storage::{self,engine::Engine as storageEngine};
@@ -94,7 +94,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         self.transaction.delete(key)
     }
 
-    fn scan(&self, table_name: String, filter: Option<(String, Expression)>) -> Result<Vec<Row>> {
+    fn scan(&self, table_name: String, filter: Option<Expression>) -> Result<Vec<Row>> {
         let table = self.must_get_table(table_name.clone())?;
         // 根据前缀扫描表
         let prefix = PrefixKey::Row(table_name.clone()).encode()?;
@@ -104,11 +104,15 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         for res in results {
             // 根据filter过滤数据
             let row: Row = bincode::deserialize(&res.value)?;
-            if let Some((col, expression)) = &filter {
-                let col_index = table.get_col_index(col)?;
-                if Value::from_expression_to_value(expression.clone()) == row[col_index].clone(){
-                    // 过滤where的条件和这里的列数据是否一致
-                    rows.push(row);
+            if let Some( expression) = &filter {
+                let cols = table.columns.iter().map(|c| c.name.clone()).collect();
+                match parse_expression(expression, &cols, &row, &cols, &row)? {
+                    Value::Null => {}
+                    Value::Boolean(false) => {}
+                    Value::Boolean(true) => {
+                        rows.push(row);
+                    }
+                    _ => return Err(Error::Internal("[KV Engine Scan] Unexpected expression".into())),
                 }
             }else{
                 // filter不存在，查找所有数据
@@ -687,6 +691,35 @@ mod tests {
                         ],
                     ]
                 );
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut s = kvengine.session()?;
+        s.execute("create table t1 (a int primary key, b text, c float, d bool);")?;
+
+        s.execute("insert into t1 values (1, 'aa', 3.1, true);")?;
+        s.execute("insert into t1 values (2, 'bb', 5.3, true);")?;
+        s.execute("insert into t1 values (3, null, NULL, false);")?;
+        s.execute("insert into t1 values (4, null, 4.6, false);")?;
+        s.execute("insert into t1 values (5, 'bb', 5.8, true);")?;
+        s.execute("insert into t1 values (6, 'dd', 1.4, false);")?;
+
+        match s.execute("select * from t1 where d < true;")? {
+            ResultSet::Scan { columns, rows } => {
+                // for row in rows {
+                //     println!("{:?}", row);
+                // }
+                assert_eq!(4, columns.len());
+                assert_eq!(3, rows.len());
             }
             _ => unreachable!(),
         }

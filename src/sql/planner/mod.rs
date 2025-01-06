@@ -23,7 +23,7 @@ pub enum Node{
         // select
         table_name: String,
         // 过滤条件
-        filter: Option<(String, Expression)>,
+        filter: Option<Expression>,
     },
     Update{
         table_name: String,

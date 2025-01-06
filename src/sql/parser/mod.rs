@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::iter::Peekable;
 use crate::sql::parser::lexer::{Keyword, Lexer, Token};
 use crate::error::{Result, Error};
-use crate::sql::parser::ast::{Column, Expression, FromItem, JoinType, OrderBy, Sentence};
+use crate::sql::parser::ast::{Column, Expression, FromItem, JoinType, Operation, OrderBy, Sentence};
 use crate::sql::parser::ast::FromItem::{Join, Table};
 use crate::sql::parser::ast::JoinType::{Cross, Inner, Left, Right};
 use crate::sql::types::DataType;
@@ -153,11 +153,46 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+    // 解析表达式当中的Operation类型
+    fn parse_operation(&mut self) -> Result<Expression>{
+        let left = self.parse_expression()?;
+        let token = self.next()?;
+        let res = match token{
+            Token::Equal => Expression::Operation(Operation::Equal(
+                Box::new(left),
+                Box::new(self.parse_expression()?),
+            )),
+            Token::Greater => Expression::Operation(Operation::Greater(
+                Box::new(left),
+                Box::new(self.parse_expression()?),
+            )),
+            Token::GreaterEqual => Expression::Operation(Operation::GreaterEqual(
+                Box::new(left),
+                Box::new(self.parse_expression()?),
+            )),
+            Token::Less=> Expression::Operation(Operation::Less(
+                Box::new(left),
+                Box::new(self.parse_expression()?),
+            )),
+            Token::LessEqual=> Expression::Operation(Operation::LessEqual(
+                Box::new(left),
+                Box::new(self.parse_expression()?),
+            )),
+            Token::NotEqual => Expression::Operation(Operation::NotEqual(
+                Box::new(left),
+                Box::new(self.parse_expression()?),
+            )),
+            _ => return Err(Error::Internal(format!("[Parser] Unexpected token {}",token))),
+        };
+        Ok(res)
+    }
+
     // 分类二：Select语句
     fn parse_select(&mut self) -> Result<Sentence>{
         Ok(Sentence::Select {
             select_condition: self.parse_select_condition()?,
             from_item: self.parse_from_condition()?,
+            where_condition: self.parse_where_condition()?,
             group_by: self.parse_group_by()?,
             order_by: self.parse_order_by_condition()?,
             limit: {
@@ -364,14 +399,11 @@ impl<'a> Parser<'a> {
         Ok(Some(self.parse_expression()?))
     }
 
-    fn parse_where_condition(&mut self) -> Result<Option<(String, Expression)>>{
+    fn parse_where_condition(&mut self) -> Result<Option<Expression>>{
         if self.next_if_is_token(Token::Keyword(Keyword::Where)).is_none(){
             return Ok(None);  // 没有指定where条件
         }
-        let col = self.expect_next_is_ident()?;
-        self.expect_next_token_is(Token::Equal)?;
-        let value = self.parse_expression()?;
-        Ok(Some((col, value)))
+        Ok(Some(self.parse_operation()?))
     }
 
     fn parse_order_by_condition(&mut self) -> Result<Vec<(String, OrderBy)>>{
@@ -448,6 +480,7 @@ impl<'a> Parser<'a> {
 mod tests{
     use super::*;
     use crate::{error::Result};
+    use crate::sql::parser::ast::Consts;
     use crate::sql::parser::ast::Consts::Integer;
     use crate::sql::parser::ast::OrderBy::{Asc, Desc};
 
@@ -534,13 +567,17 @@ mod tests{
 
     #[test]
     fn test_parser_select() -> Result<()> {
-        let sql = "select * from tbl1 limit 10 offset 20;";
+        let sql = "select * from tbl1 where a <= 100 limit 10 offset 20;";
         let sentence = Parser::new(sql).parse()?;
         assert_eq!(
             sentence,
             ast::Sentence::Select {
                 select_condition:vec![],
                 from_item: Table { name:"tbl1".into() },
+                where_condition: Some(ast::Expression::Operation(ast::Operation::LessEqual(
+                    Box::new(ast::Expression::Field("a".into())),
+                    Box::new(ast::Expression::Consts(Consts::Integer(100)))
+                ))),
                 group_by: None,
                 order_by: vec![],
                 limit: Some(Expression::Consts(Integer(10))),
@@ -555,6 +592,7 @@ mod tests{
             ast::Sentence::Select {
                 select_condition:vec![],
                 from_item: Table { name:"tbl1".into() },
+                where_condition: None,
                 group_by: None,
                 order_by: vec![
                     ("a".to_string(), Asc),
@@ -577,6 +615,7 @@ mod tests{
                     (Expression::Field("c".into()), None),
                 ],
                 from_item: Table { name:"tbl1".into() },
+                where_condition: None,
                 group_by: None,
                 order_by: vec![
                     ("a".to_string(), Asc),
@@ -611,6 +650,7 @@ mod tests{
                     join_type: ast::JoinType::Cross,
                     condition: None,
                 },
+                where_condition: None,
                 group_by: None,
                 order_by: vec![],
                 limit: None,
@@ -631,6 +671,7 @@ mod tests{
                 from_item: ast::FromItem::Table {
                     name: "tbl1".into()
                 },
+                where_condition: None,
                 group_by: Some(Expression::Field("a".into())),
                 order_by: vec![],
                 limit: None,
@@ -656,7 +697,10 @@ mod tests{
                 ]
                     .into_iter()
                     .collect(),
-                condition: Some(("c".into(), ast::Consts::String("a".into()).into())),
+                condition: Some(ast::Expression::Operation(ast::Operation::Equal(
+                    Box::new(ast::Expression::Field("c".into())),
+                    Box::new(ast::Expression::Consts(Consts::String("a".into())))
+                ))),
             }
         );
 

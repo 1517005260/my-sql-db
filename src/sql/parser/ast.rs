@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use crate::sql::types::DataType;
+use crate::error::Error::Internal;
+use crate::sql::types::{DataType, Value};
 // 本模块是抽象语法树的定义
 
 
@@ -64,10 +65,14 @@ pub enum OrderBy{
     Desc,
 }
 
-// 列相等语法
 #[derive(Debug, PartialEq, Clone)]
 pub enum Operation{
     Equal(Box<Expression>, Box<Expression>),
+    Greater(Box<Expression>, Box<Expression>),  // a > b，下同
+    GreaterEqual(Box<Expression>, Box<Expression>),
+    Less(Box<Expression>, Box<Expression>),
+    LessEqual(Box<Expression>, Box<Expression>),
+    NotEqual(Box<Expression>, Box<Expression>),
 }
 
 // 定义 Consts -> Expression 的类型转换
@@ -92,6 +97,7 @@ pub enum Sentence{
     Select{
         select_condition: Vec<(Expression, Option<String>)>,  // 列名，可选的别名
         from_item: FromItem,
+        where_condition: Option<Expression>,
         group_by: Option<Expression>,
         order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
         limit: Option<Expression>,
@@ -100,10 +106,138 @@ pub enum Sentence{
     Update{
         table_name: String,
         columns: BTreeMap<String, Expression>,
-        condition: Option<(String, Expression)>
+        condition: Option<Expression>
     },
     Delete{
         table_name: String,
-        condition: Option<(String, Expression)>,
+        condition: Option<Expression>,
     },
+}
+
+// 解析表达式
+pub fn parse_expression(expr: &Expression,
+                    left_cols: &Vec<String>, left_row: &Vec<Value>,
+                    right_cols: &Vec<String>, right_row: &Vec<Value>) -> crate::error::Result<Value> {
+    match expr {
+        Expression::Field(col_name) => {
+            // 根据列名，取对应行的数据
+            let pos = match left_cols.iter().position(|col| *col == *col_name){
+                Some(pos) => pos,
+                None => return Err(Internal(format!("[Executor] Column {} does not exist", col_name))),
+            };
+            Ok(left_row[pos].clone())
+        },
+        Expression::Consts(c) => {
+            // 解析诸如 a = 3 中的常量
+            let value = match c {
+                Consts::Null => Value::Null,
+                Consts::Boolean(v) => Value::Boolean(*v),
+                Consts::Integer(v) => Value::Integer(*v),
+                Consts::Float(v) => Value::Float(*v),
+                Consts::String(v) => Value::String(v.clone()),
+            };
+            Ok(value)
+        },
+        Expression::Operation(operation) =>{
+            match operation {
+                Operation::Equal(left_expr, right_expr) =>{
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
+
+                    Ok(match (left_value, right_value) {
+                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l == r),
+                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l == r),
+                        (Value::Integer(l), Value::Float(r)) => Value::Boolean(l as f64 == r),
+                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l == r as f64),
+                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l == r),
+                        (Value::String(l), Value::String(r)) => Value::Boolean(l == r),
+                        (Value::Null, _) => Value::Null,
+                        (_, Value::Null) => Value::Null,
+                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
+                    })
+                },
+                Operation::Greater(left_expr, right_expr) =>{
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
+
+                    Ok(match (left_value, right_value) {
+                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l > r),
+                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l > r),
+                        (Value::Integer(l), Value::Float(r)) => Value::Boolean(l as f64 > r),
+                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l > r as f64),
+                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l > r),
+                        (Value::String(l), Value::String(r)) => Value::Boolean(l > r),
+                        (Value::Null, _) => Value::Null,
+                        (_, Value::Null) => Value::Null,
+                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
+                    })
+                },
+                Operation::GreaterEqual(left_expr, right_expr) =>{
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
+
+                    Ok(match (left_value, right_value) {
+                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l >= r),
+                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l >= r),
+                        (Value::Integer(l), Value::Float(r)) => Value::Boolean(l as f64 >= r),
+                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l >= r as f64),
+                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l >= r),
+                        (Value::String(l), Value::String(r)) => Value::Boolean(l >= r),
+                        (Value::Null, _) => Value::Null,
+                        (_, Value::Null) => Value::Null,
+                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
+                    })
+                },
+                Operation::Less(left_expr, right_expr) =>{
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
+
+                    Ok(match (left_value, right_value) {
+                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l < r),
+                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l < r),
+                        (Value::Integer(l), Value::Float(r)) => Value::Boolean((l as f64) < r),
+                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l < r as f64),
+                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l < r),
+                        (Value::String(l), Value::String(r)) => Value::Boolean(l < r),
+                        (Value::Null, _) => Value::Null,
+                        (_, Value::Null) => Value::Null,
+                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
+                    })
+                },
+                Operation::LessEqual(left_expr, right_expr) =>{
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
+
+                    Ok(match (left_value, right_value) {
+                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l <= r),
+                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l <= r),
+                        (Value::Integer(l), Value::Float(r)) => Value::Boolean(l as f64 <= r),
+                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l <= r as f64),
+                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l <= r),
+                        (Value::String(l), Value::String(r)) => Value::Boolean(l <= r),
+                        (Value::Null, _) => Value::Null,
+                        (_, Value::Null) => Value::Null,
+                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
+                    })
+                },
+                Operation::NotEqual(left_expr, right_expr) =>{
+                    let left_value = parse_expression(&left_expr, left_cols, left_row, right_cols, right_row)?;
+                    let right_value = parse_expression(&right_expr, right_cols, right_row, left_cols, left_row)?;
+
+                    Ok(match (left_value, right_value) {
+                        (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(l != r),
+                        (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l != r),
+                        (Value::Integer(l), Value::Float(r)) => Value::Boolean(l as f64 != r),
+                        (Value::Float(l), Value::Integer(r)) => Value::Boolean(l != r as f64),
+                        (Value::Float(l), Value::Float(r)) => Value::Boolean(l != r),
+                        (Value::String(l), Value::String(r)) => Value::Boolean(l != r),
+                        (Value::Null, _) => Value::Null,
+                        (_, Value::Null) => Value::Null,
+                        (l, r) => return Err(Internal(format!("[Executor] Can not compare expression {} and {}", l, r)))
+                    })
+                },
+            }
+        },
+        _ => return Err(Internal(format!("[Executor] Unexpected Expression {:?}", expr)))
+    }
 }

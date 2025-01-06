@@ -1,4 +1,4 @@
-use crate::sql::parser::ast::{FromItem, JoinType, Sentence};
+use crate::sql::parser::ast::{Expression, FromItem, JoinType, Sentence};
 use crate::sql::planner::{Node, Plan};
 use crate::sql::schema;
 use crate::sql::schema::Table;
@@ -51,10 +51,10 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {select_condition,from_item,group_by , order_by, limit, offset} =>
+            Sentence::Select {select_condition,from_item,where_condition, group_by , order_by, limit, offset} =>
                 {
                     // from
-                    let mut node = self.build_from_item(from_item)?;
+                    let mut node = self.build_from_item(from_item, &where_condition)?;
 
                     // agg聚集函数
                     let mut has_agg = false;
@@ -138,9 +138,9 @@ impl Planner {
         }
 
     // 将from_item变成plan_node
-    fn build_from_item(&mut self, item: FromItem) -> Result<Node>{
+    fn build_from_item(&mut self, item: FromItem, filter: &Option<Expression>) -> Result<Node>{
         let node = match item {
-            FromItem::Table { name } => Node::Scan {table_name:name, filter: None},
+            FromItem::Table { name } => Node::Scan {table_name:name, filter: filter.clone()},
             FromItem::Join { left, right, join_type, condition } => {
                 // 优化： a right join b == b left join a， 这样一套逻辑就可以复用
                 let (left, right) = match join_type {
@@ -154,8 +154,8 @@ impl Planner {
                 };
 
                 Node::NestedLoopJoin {
-                    left: Box::new(self.build_from_item(*left)?),
-                    right: Box::new(self.build_from_item(*right)?),
+                    left: Box::new(self.build_from_item(*left, filter)?),
+                    right: Box::new(self.build_from_item(*right, filter)?),
                     condition,
                     outer,
                 }
