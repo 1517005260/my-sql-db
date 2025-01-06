@@ -724,6 +724,14 @@ mod tests {
             _ => unreachable!(),
         }
 
+        match s.execute("select b, sum(c) from t1 group by b having sum < 5 order by sum;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(2, columns.len());
+                assert_eq!(3, rows.len());
+            }
+            _ => unreachable!(),
+        }
+
         std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }

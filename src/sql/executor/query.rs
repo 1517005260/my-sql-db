@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
-use crate::sql::parser::ast::{Expression, OrderBy};
+use crate::sql::parser::ast::{parse_expression, Expression, OrderBy};
 use crate::error::Error::Internal;
 use crate::sql::parser::ast::OrderBy::Asc;
+use crate::sql::types::Value;
 
 pub struct Scan{
     table_name: String,
@@ -28,6 +29,39 @@ impl<T:Transaction> Executor<T> for Scan{
                 rows,
             }
         )
+    }
+}
+
+pub struct Having<T: Transaction>{
+    source: Box<dyn Executor<T>>,
+    condition: Expression,
+}
+
+impl<T:Transaction> Having<T>{
+    pub fn new(source: Box<dyn Executor<T>>, condition: Expression) -> Box<Self>{
+        Box::new(Self{ source, condition })
+    }
+}
+
+impl<T:Transaction> Executor<T> for Having<T>{
+    fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
+        match self.source.execute(transaction){
+            Ok(ResultSet::Scan {columns, rows}) => {
+                let mut new_rows = Vec::new();
+                for row in rows{
+                    match parse_expression(&self.condition, &columns, &row, &columns, &row)? {
+                        Value::Null => {}
+                        Value::Boolean(false) => {}
+                        Value::Boolean(true) => {
+                            new_rows.push(row);
+                        }
+                        _ => return Err(Internal("[Executor Having] Unexpected expression".into())),
+                    }
+                }
+                Ok(ResultSet::Scan {columns, rows: new_rows})
+            },
+            _ => return Err(Internal("[Executor] Unexpected ResultSet, expected Scan Node".to_string())),
+        }
     }
 }
 

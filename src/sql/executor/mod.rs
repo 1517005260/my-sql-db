@@ -10,7 +10,7 @@ use crate::sql::engine::Transaction;
 use crate::sql::executor::aggregate::Aggregate;
 use crate::sql::executor::join::NestedLoopJoin;
 use crate::sql::executor::mutation::{Delete, Insert, Update};
-use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection};
+use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection, Having};
 use crate::sql::executor::schema::CreateTable;
 use crate::sql::planner::Node;
 use crate::sql::types::Row;
@@ -57,6 +57,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::Projection {source, expressions} => Projection::new(Self::build(*source), expressions),
             Node::NestedLoopJoin { left, right, condition, outer} => NestedLoopJoin::new(Self::build(*left), Self::build(*right), condition, outer),
             Node::Aggregate { source, expression, group_by} => Aggregate::new(Self::build(*source), expression, group_by),
+            Node::Having {source, condition} => Having::new(Self::build(*source), condition),
         }
     }
 }

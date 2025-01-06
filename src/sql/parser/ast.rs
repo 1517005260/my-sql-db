@@ -99,6 +99,7 @@ pub enum Sentence{
         from_item: FromItem,
         where_condition: Option<Expression>,
         group_by: Option<Expression>,
+        having: Option<Expression>,
         order_by: Vec<(String, OrderBy)>, // 例如，order by col_a desc
         limit: Option<Expression>,
         offset: Option<Expression>,

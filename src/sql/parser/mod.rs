@@ -194,6 +194,7 @@ impl<'a> Parser<'a> {
             from_item: self.parse_from_condition()?,
             where_condition: self.parse_where_condition()?,
             group_by: self.parse_group_by()?,
+            having: self.parse_having()?,
             order_by: self.parse_order_by_condition()?,
             limit: {
                 if self.next_if_is_token(Token::Keyword(Keyword::Limit)).is_some(){
@@ -406,6 +407,13 @@ impl<'a> Parser<'a> {
         Ok(Some(self.parse_operation()?))
     }
 
+    fn parse_having(&mut self) -> Result<Option<Expression>>{
+        if self.next_if_is_token(Token::Keyword(Keyword::Having)).is_none(){
+            return Ok(None);
+        }
+        Ok(Some(self.parse_operation()?))
+    }
+
     fn parse_order_by_condition(&mut self) -> Result<Vec<(String, OrderBy)>>{
         let mut order_by_condition = Vec::new();
         if self.next_if_is_token(Token::Keyword(Keyword::Order)).is_none(){
@@ -579,6 +587,7 @@ mod tests{
                     Box::new(ast::Expression::Consts(Consts::Integer(100)))
                 ))),
                 group_by: None,
+                having: None,
                 order_by: vec![],
                 limit: Some(Expression::Consts(Integer(10))),
                 offset: Some(Expression::Consts(Integer(20))),
@@ -594,6 +603,7 @@ mod tests{
                 from_item: Table { name:"tbl1".into() },
                 where_condition: None,
                 group_by: None,
+                having: None,
                 order_by: vec![
                     ("a".to_string(), Asc),
                     ("b".to_string(), Asc),
@@ -617,6 +627,7 @@ mod tests{
                 from_item: Table { name:"tbl1".into() },
                 where_condition: None,
                 group_by: None,
+                having: None,
                 order_by: vec![
                     ("a".to_string(), Asc),
                     ("b".to_string(), Asc),
@@ -652,13 +663,14 @@ mod tests{
                 },
                 where_condition: None,
                 group_by: None,
+                having: None,
                 order_by: vec![],
                 limit: None,
                 offset: None,
             }
         );
 
-        let sql = "select count(a), min(b), max(c) from tbl1 group by a;";
+        let sql = "select count(a), min(b), max(c) from tbl1 group by a having min = 10;";
         let sentence = Parser::new(sql).parse()?;
         assert_eq!(
             sentence,
@@ -673,6 +685,10 @@ mod tests{
                 },
                 where_condition: None,
                 group_by: Some(Expression::Field("a".into())),
+                having: Some(ast::Expression::Operation(ast::Operation::Equal(
+                    Box::new(ast::Expression::Field("min".into())),
+                    Box::new(ast::Expression::Consts(Consts::Integer(10)))
+                ))),
                 order_by: vec![],
                 limit: None,
                 offset: None,

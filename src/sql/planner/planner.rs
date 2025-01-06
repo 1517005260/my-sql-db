@@ -51,12 +51,12 @@ impl Planner {
                     values,
                 },
 
-            Sentence::Select {select_condition,from_item,where_condition, group_by , order_by, limit, offset} =>
+            Sentence::Select {select_condition, from_item, where_condition, group_by, having,  order_by, limit, offset} =>
                 {
                     // from
                     let mut node = self.build_from_item(from_item, &where_condition)?;
 
-                    // agg聚集函数
+                    // agg or group by
                     let mut has_agg = false;
                     if !select_condition.is_empty(){
                         for (expr, _) in select_condition.iter(){
@@ -77,6 +77,14 @@ impl Planner {
                                 expression: select_condition.clone(),
                                 group_by,
                             }
+                        }
+                    }
+
+                    // having
+                    if let Some(expr) = having{
+                        node = Node::Having {
+                            source: Box::new(node),
+                            condition: expr,
                         }
                     }
 
