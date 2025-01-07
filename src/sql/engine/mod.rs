@@ -1,4 +1,4 @@
-mod kv;
+pub mod kv;
 
 use crate::error::{Error, Result};
 use crate::sql::executor::ResultSet;
