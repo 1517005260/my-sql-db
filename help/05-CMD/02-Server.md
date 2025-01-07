@@ -266,7 +266,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use crate::Request::SQL;
 
-const DB_STORAGE_PATH: &str = "../../tmp/sqldb-test/log";  // 指定存储文件
+const DB_STORAGE_PATH: &str = "./tmp/sqldb-test/log";  // 指定存储文件
 
 enum Request{
     // 客户端的请求类型

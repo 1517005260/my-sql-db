@@ -40,6 +40,32 @@ pub enum ResultSet{
     },
 }
 
+impl ResultSet {
+    pub fn to_string(&self) -> String {
+        match self {
+            ResultSet::CreateTable { table_name } => format!("CREATE TABLE {}", table_name),  // 创建成功提示
+            ResultSet::Insert { count } => format!("INSERT {} rows", count),                  // 插入成功提示
+            ResultSet::Scan { columns, rows } => {                          // 返回扫描结果
+                let columns = columns.join(" | ");  // 每列用 | 分割
+                let rows_len = rows.len();   // 一共多少行
+                let rows = rows
+                    .iter()
+                    .map(|row| {
+                        row.iter()  // 遍历一行的每个元素
+                            .map(|v| v.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" | ")   // 每列用 | 分割
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");       // 每行数据用 \n 分割
+                format!("{}\n{}\n({} rows)", columns, rows, rows_len)
+            }
+            ResultSet::Update { count } => format!("UPDATE {} rows", count),               // 更新成功提示
+            ResultSet::Delete { count } => format!("DELETE {} rows", count),               // 删除成功提示
+        }
+    }
+}
+
 impl<T:Transaction + 'static> dyn Executor<T>{
     pub fn build(node: Node) -> Box<dyn Executor<T>>{
         match node {

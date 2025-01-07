@@ -11,9 +11,10 @@ use my_sql_db::error::Result;
 use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
+use futures::SinkExt;
 use crate::Request::SQL;
 
-const DB_STORAGE_PATH: &str = "../../tmp/sqldb-test/log";  // 指定存储文件
+const DB_STORAGE_PATH: &str = "./tmp/sqldb-test/log";  // 指定存储文件
 
 enum Request{
     // 客户端的请求类型
@@ -42,13 +43,19 @@ impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进�
                     let request = SQL(line);
 
                     // 执行request命令
-                    match request {
-                        SQL(sql) => {
-                            let response = self.session.execute(&sql)?;
-                            println!("execute sql result : {:?}", response);  // 返回给客户端，但是现在仅有server
-                        }
+                    let response = match request {
+                        SQL(sql) => self.session.execute(&sql),
                         Request::ListTables => todo!(),
                         Request::TableInfo(_) => todo!(),
+                    };
+
+                    // 发送执行结果
+                    let res = match response {
+                        Ok(result_set) => result_set.to_string(),
+                        Err(e) => e.to_string(),
+                    };
+                    if let Err(e) = lines.send(res.as_str()).await {
+                        println!("error on sending response; error = {e:?}");
                     }
                 }
                 Err(e) => {
