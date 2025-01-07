@@ -15,6 +15,7 @@ use futures::SinkExt;
 use crate::Request::SQL;
 
 const DB_STORAGE_PATH: &str = "./tmp/sqldb-test/log";  // 指定存储文件
+const RESPONSE_END : &str = "!!!THIS IS THE END!!!";   // 结束符，内容可以自定义一个不常见的字符串
 
 enum Request{
     // 客户端的请求类型
@@ -56,6 +57,9 @@ impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进�
                     };
                     if let Err(e) = lines.send(res.as_str()).await {
                         println!("error on sending response; error = {e:?}");
+                    }
+                    if let Err(e) = lines.send(RESPONSE_END).await {  // 发完结果后发个结束符
+                        println!("error on sending response end; error = {e:?}");
                     }
                 }
                 Err(e) => {

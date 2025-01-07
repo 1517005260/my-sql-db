@@ -14,3 +14,4 @@ tokio-util = { version = "0.7.12", features = ["full"] }
 tokio-stream = "0.1.16"
 futures = "0.3.31"
 bytes = "1.0.0"
+rustyline = "15.0.0"

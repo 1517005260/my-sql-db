@@ -5,6 +5,7 @@ mod join;
 mod aggregate;
 mod calculate;
 
+use std::cmp::max;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::aggregate::Aggregate;
@@ -45,20 +46,42 @@ impl ResultSet {
         match self {
             ResultSet::CreateTable { table_name } => format!("CREATE TABLE {}", table_name),  // 创建成功提示
             ResultSet::Insert { count } => format!("INSERT {} rows", count),                  // 插入成功提示
-            ResultSet::Scan { columns, rows } => {                          // 返回扫描结果
-                let columns = columns.join(" | ");  // 每列用 | 分割
+            ResultSet::Scan { columns, rows } => { // 返回扫描结果
                 let rows_len = rows.len();   // 一共多少行
-                let rows = rows
-                    .iter()
+
+                // 先找到列名的长度
+                let mut max_len = columns.iter().map(|c| c.len()).collect::<Vec<usize>>();
+                // 然后将列名和行数据进行比较，选出最长的那个
+                for a_row in rows{
+                    for(i, v) in a_row.iter().enumerate(){
+                        if v.to_string().len() > max_len[i]{
+                            max_len[i] = v.to_string().len();
+                        }
+                    }
+                }
+
+                // 展示列名
+                let columns = columns.iter().zip(max_len.iter()) // 将两个迭代器 columns 和 max_len 配对在一起
+                    .map(|(col, &len)| format!("{:width$}", col, width = len))
+                    .collect::<Vec<_>>().join(" |");  // 每列用 | 分割
+
+                // 展示列名和数据的分隔符
+                let sep = max_len.iter().map(|v| format!("{}", "-".repeat(*v + 1)))  // 让“-”重复最大长度次
+                    .collect::<Vec<_>>().join("+");  // 用 + 连接
+
+                // 展示行
+                let rows = rows.iter()
                     .map(|row| {
-                        row.iter()  // 遍历一行的每个元素
-                            .map(|v| v.to_string())
+                        row.iter()
+                            .zip(max_len.iter())
+                            .map(|(v, &len)| format!("{:width$}", v.to_string(), width = len))
                             .collect::<Vec<_>>()
-                            .join(" | ")   // 每列用 | 分割
+                            .join(" |")
                     })
                     .collect::<Vec<_>>()
                     .join("\n");       // 每行数据用 \n 分割
-                format!("{}\n{}\n({} rows)", columns, rows, rows_len)
+
+                format!("{}\n{}\n{}\n({} rows)", columns, sep, rows, rows_len)
             }
             ResultSet::Update { count } => format!("UPDATE {} rows", count),               // 更新成功提示
             ResultSet::Delete { count } => format!("DELETE {} rows", count),               // 删除成功提示
