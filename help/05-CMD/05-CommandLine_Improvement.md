@@ -1,3 +1,38 @@
+# 命令行进阶完善
+
+目标：
+
+- 命令历史记录功能
+- 命令自动补全功能
+- 多行命令输入功能
+- 语句执行时间显示
+
+我们需要大幅度修改client.rs。
+
+## 代码实现
+
+项目依赖：
+
+```toml
+dirs = "4.0"
+strum = "0.24"
+strum_macros = "0.24"
+colored = "2.0"
+```
+
+修改lexer.rs下的Keyword枚举：
+
+```rust
+#[derive(Debug, Clone, PartialEq, EnumIter)]
+pub enum Keyword {}
+
+// mod.rs
+pub mod lexer; 
+```
+
+重写client.rs：
+
+```rust
 #![warn(rust_2018_idioms)]
 use futures::{SinkExt, TryStreamExt};
 use rustyline::completion::{Completer, Pair};
@@ -196,3 +231,4 @@ impl Client {
         Ok(())
     }
 }
+```

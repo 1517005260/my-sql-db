@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 use std::str::Chars;
+use strum_macros::EnumIter;
 use crate::error::{Error, Result}; //自定义result
 use crate::error::Error::Parse;
 
@@ -53,7 +54,7 @@ impl Display for Token {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumIter)]
 pub enum Keyword {
     Create,
     Table,

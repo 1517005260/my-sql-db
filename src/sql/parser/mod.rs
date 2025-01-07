@@ -7,7 +7,7 @@ use crate::sql::parser::ast::FromItem::{Join, Table};
 use crate::sql::parser::ast::JoinType::{Cross, Inner, Left, Right};
 use crate::sql::types::DataType;
 
-mod lexer;  // lexer模块仅parser文件内部可使用
+pub mod lexer;  // lexer模块仅parser文件内部可使用
 pub mod ast;
 
 // 定义Parser
