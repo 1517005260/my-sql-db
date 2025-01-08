@@ -19,9 +19,7 @@ const RESPONSE_END : &str = "!!!THIS IS THE END!!!";   // 结束符，内容可�
 
 enum Request{
     // 客户端的请求类型
-    SQL(String),   // 普通SQL命令
-    ListTables,    // show tables命令
-    TableInfo(String),  // show table table_name 命令
+    SQL(String),   // SQL命令
 }
 
 pub struct ServerSession<E: engine::Engine> {
@@ -29,7 +27,7 @@ pub struct ServerSession<E: engine::Engine> {
 }
 
 impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进来的，可能生命周期不够长，这里强制为static
-    pub fn new(engine: MutexGuard<E>) -> Result<Self>{
+    pub fn new(engine: MutexGuard<'_, E>) -> Result<Self>{
         Ok(Self{session: engine.session()?})
     }
 
@@ -46,8 +44,6 @@ impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进�
                     // 执行request命令
                     let response = match request {
                         SQL(sql) => self.session.execute(&sql),
-                        Request::ListTables => todo!(),
-                        Request::TableInfo(_) => todo!(),
                     };
 
                     // 发送执行结果
@@ -100,7 +96,9 @@ async fn main() -> Result<()> {
                 tokio::spawn(async move {
                     match server_session.handle_request(socket).await{
                         Ok(_) => {}
-                        Err(_) => {}
+                        Err(e) => {
+                            println!("Internal server error {:?}", e);
+                        }
                     }
                 });
             }

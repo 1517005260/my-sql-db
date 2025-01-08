@@ -97,6 +97,8 @@ pub enum Keyword {
     On,
     Group,
     Having,
+    Show,
+    Tables,
 }
 
 // word -> Keyword
@@ -145,6 +147,8 @@ impl Keyword {
                 "ON" => Keyword::On,
                 "GROUP" => Keyword::Group,
                 "HAVING" => Keyword::Having,
+                "SHOW" => Keyword::Show,
+                "TABLES" => Keyword::Tables,
                 _ => return None,
             }
         )
@@ -195,6 +199,8 @@ impl Keyword {
             Keyword::On => "ON",
             Keyword::Group => "GROUP",
             Keyword::Having => "HAVING",
+            Keyword::Show => "SHOW",
+            Keyword::Tables => "TABLES",
         }
     }
 }

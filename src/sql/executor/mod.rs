@@ -4,8 +4,9 @@ mod query;
 mod join;
 mod aggregate;
 mod calculate;
+mod show;
 
-use std::cmp::max;
+use rustyline::hint::Hint;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::aggregate::Aggregate;
@@ -13,6 +14,7 @@ use crate::sql::executor::join::NestedLoopJoin;
 use crate::sql::executor::mutation::{Delete, Insert, Update};
 use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection, Having};
 use crate::sql::executor::schema::CreateTable;
+use crate::sql::executor::show::{TableNames, TableSchema};
 use crate::sql::planner::Node;
 use crate::sql::types::Row;
 
@@ -37,7 +39,13 @@ pub enum ResultSet{
         count: usize,   // 更新了多少条数据
     },
     Delete{
-      count: usize,   // 删除了多少条数据
+        count: usize,   // 删除了多少条数据
+    },
+    TableSchema{
+        schema: String,
+    },
+    TableNames{
+        names: Vec<String>,
     },
 }
 
@@ -85,6 +93,14 @@ impl ResultSet {
             }
             ResultSet::Update { count } => format!("UPDATE {} rows", count),               // 更新成功提示
             ResultSet::Delete { count } => format!("DELETE {} rows", count),               // 删除成功提示
+            ResultSet::TableSchema { schema } => format!("{}", schema),
+            ResultSet::TableNames { names } => {
+                if names.is_empty() {
+                    "No tables found.".to_string()
+                } else {
+                    names.join("\n")
+                }
+            },
         }
     }
 }
@@ -107,6 +123,8 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::NestedLoopJoin { left, right, condition, outer} => NestedLoopJoin::new(Self::build(*left), Self::build(*right), condition, outer),
             Node::Aggregate { source, expression, group_by} => Aggregate::new(Self::build(*source), expression, group_by),
             Node::Having {source, condition} => Having::new(Self::build(*source), condition),
+            Node::TableSchema {name} => TableSchema::new(&name),
+            Node::TableNames { } => TableNames::new(),
         }
     }
 }

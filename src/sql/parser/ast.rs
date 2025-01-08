@@ -113,6 +113,12 @@ pub enum Sentence{
         table_name: String,
         condition: Option<Expression>,
     },
+    TableSchema{
+        table_name: String,
+    },
+    TableNames{
+        // 没有参数，因为是全体表
+    },
 }
 
 // 解析表达式

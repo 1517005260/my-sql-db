@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
     let addr = addr.parse::<SocketAddr>()?;
-    let client = Client::new(addr);
+    let mut client = Client::new(addr).await?;
 
     // 配置 Rustyline
     let config = Config::builder()
@@ -168,17 +168,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 pub struct Client {
-    address: SocketAddr,
+    stream: TcpStream,
 }
 
 impl Client {
-    pub fn new(address: SocketAddr) -> Self {
-        Self { address }
+    pub async fn new(address: SocketAddr) -> Result<Self, Box<dyn Error>> {
+        let stream = TcpStream::connect(address).await?;
+        Ok(Self { stream })
     }
 
-    pub async fn exec_cmd(&self, cmd: &str) -> Result<(), Box<dyn Error>> {
-        let mut stream = TcpStream::connect(self.address).await?;
-        let (r, w) = stream.split();
+    pub async fn exec_cmd(&mut self, cmd: &str) -> Result<(), Box<dyn Error>> {
+        let (r, w) = self.stream.split();
         let mut sink = FramedWrite::new(w, LinesCodec::new());
         let mut stream = FramedRead::new(r, LinesCodec::new());
 

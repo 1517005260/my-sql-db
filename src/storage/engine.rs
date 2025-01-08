@@ -25,13 +25,17 @@ pub trait Engine{   // 抽象存储引擎接口定义，对接内存/磁盘
 
     // 前缀扫描
     fn prefix_scan(&mut self, prefix: Vec<u8>) -> Self::EngineIter<'_>{
-        // 特定条件下的scan
+        // abc,abd,abe, 均在 < abf的范围内，即[abc, ab (e+1) )
         let start = Bound::Included(prefix.clone());
         let mut bound_prefix = prefix.clone();
-        if let Some(last) = bound_prefix.iter_mut().last() {
-            *last += 1;
-        }
-        let end = Bound::Excluded(bound_prefix);
+        let end = match bound_prefix.iter().rposition(|b| *b != 255) {  // 从后往前找第一个不是255的
+            Some(pos) => {
+                bound_prefix[pos] += 1;
+                bound_prefix.truncate(pos + 1);  // 从255开始向后丢弃
+                Bound::Excluded(bound_prefix)
+            }
+            None => Bound::Unbounded,
+        };
         self.scan((start,end))
     }
 }

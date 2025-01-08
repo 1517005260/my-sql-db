@@ -5,6 +5,7 @@ use crate::error::{Result, Error};
 use crate::sql::parser::ast::{Column, Expression, FromItem, JoinType, Operation, OrderBy, Sentence};
 use crate::sql::parser::ast::FromItem::{Join, Table};
 use crate::sql::parser::ast::JoinType::{Cross, Inner, Left, Right};
+use crate::sql::parser::ast::Sentence::{TableNames, TableSchema};
 use crate::sql::types::DataType;
 
 pub mod lexer;  // lexer模块仅parser文件内部可使用
@@ -46,6 +47,7 @@ impl<'a> Parser<'a> {
             Some(Token::Keyword(Keyword::Insert)) => self.parse_insert(),
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
             Some(Token::Keyword(Keyword::Delete)) => self.parse_delete(),
+            Some(Token::Keyword(Keyword::Show)) => self.parse_show(),
             Some(token) => Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),  // 其他token
             None => Err(Error::Parse("[Parser] Unexpected EOF".to_string()))
         }
@@ -299,6 +301,16 @@ impl<'a> Parser<'a> {
             table_name,
             condition: self.parse_where_condition()?,
         })
+    }
+
+    // 分类：show语句
+    fn parse_show(&mut self) -> Result<Sentence>{
+        self.expect_next_token_is(Token::Keyword(Keyword::Show))?;
+        match self.next()? {
+            Token::Keyword(Keyword::Tables) => Ok(TableNames {}),
+            Token::Keyword(Keyword::Table) => Ok(TableSchema {table_name: self.expect_next_is_ident()?}),
+            _ => Err(Error::Internal("[Parser] Unexpected token".to_string()))
+        }
     }
 
     fn parse_select_condition(&mut self) -> Result<Vec<(Expression, Option<String>)>>{

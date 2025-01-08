@@ -65,6 +65,12 @@ pub enum Node{
         source: Box<Node>,
         condition: Expression,
     },
+    TableSchema{
+        name: String,
+    },
+    TableNames{
+
+    },
 }
 
 // 定义执行计划，执行计划的底层是不同执行节点

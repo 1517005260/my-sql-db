@@ -55,7 +55,7 @@ impl<T:Transaction> Executor<T> for NestedLoopJoin<T>{
                     // outer join 需要显示左表所有数据
                     if self.outer && flag==false {
                         let mut row = left_row.clone();
-                        for _ in 0..right_rows[0].len() {
+                        for _ in 0..right_cols.len() {
                             row.push(Value::Null);
                         }
                         new_rows.push(row);

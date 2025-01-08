@@ -142,7 +142,9 @@ impl Planner {
                     scan: Box::new(Node::Scan {table_name, filter: condition})
                 },
 
-            })
+            Sentence::TableSchema {table_name} => Node::TableSchema {name: table_name},
+            Sentence::TableNames { } => Node::TableNames {},
+        })
         }
 
     // 将from_item变成plan_node

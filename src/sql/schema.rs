@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use crate::sql::types::{DataType, Row, Value};
 use crate::error::*;
@@ -59,6 +60,15 @@ impl Table{
     }
 }
 
+impl Display for Table{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let column_description = self.columns.iter()
+            .map(|c| format!("{}", c))
+            .collect::<Vec<_>>().join(",\n");
+        write!(f, "TABLE NAME: {} (\n{}\n)", self.name, column_description)
+    }
+}
+
 #[derive(Debug,PartialEq,Serialize,Deserialize)]
 pub struct Column{
     pub name: String,
@@ -66,4 +76,20 @@ pub struct Column{
     pub nullable: bool,
     pub default: Option<Value>,
     pub is_primary_key: bool,
+}
+
+impl Display for Column{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut column_description = format!("  {} {:?} ", self.name, self.datatype);
+        if self.is_primary_key {
+            column_description += "PRIMARY KEY ";
+        }
+        if !self.nullable && !self.is_primary_key {
+            column_description += "NOT NULL ";
+        }
+        if let Some(v) = &self.default {
+            column_description += &format!("DEFAULT {}", v.to_string());
+        }
+        write!(f, "{}", column_description)
+    }
 }

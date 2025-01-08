@@ -45,6 +45,9 @@ pub trait Transaction {
     // 获取表的信息
     fn get_table(&self, table_name:String)-> Result<Option<Table>>;
 
+    // 获取所有表名
+    fn get_all_table_names(&self)-> Result<Vec<String>>;
+
     // 必须获取表
     fn must_get_table(&self, table_name:String)-> Result<Table>{
         self.get_table(table_name.clone())?.  // ok_or : Option -> Result
@@ -56,25 +59,25 @@ pub struct Session<E:Engine>{
     engine:E  // 存储当前的 SQL 引擎实例
 }
 
-impl<E:Engine + 'static> Session<E>{
+impl<E:Engine + 'static> Session<E> {
     // 执行客户端传来的sql语句
-    pub fn execute(&mut self, sql: &str) -> Result<ResultSet>{
-        match Parser::new(sql).parse()?{    // 传进来的sql直接扔给parser解析
+    pub fn execute(&mut self, sql: &str) -> Result<ResultSet> {
+        match Parser::new(sql).parse()? {    // 传进来的sql直接扔给parser解析
             sentence => {         //  获取到了一句sql
-                  let mut transaction = self.engine.begin()?;  // 开启事务
+                let mut transaction = self.engine.begin()?;  // 开启事务
 
-                  // 开始构建plan
-                  match Plan::build(sentence)?.    // 这里获得一个node
-                      execute(&mut transaction){
-                      Ok(res) => {
-                          transaction.commit()?;  // 成功，事务提交
-                          Ok(res)
-                      },
-                      Err(e) => {
-                          transaction.rollback()?;  // 失败，事务回滚
-                          Err(e)
-                      }
-                  }
+                // 开始构建plan
+                match Plan::build(sentence)?.    // 这里获得一个node
+                    execute(&mut transaction) {
+                    Ok(res) => {
+                        transaction.commit()?;  // 成功，事务提交
+                        Ok(res)
+                    },
+                    Err(e) => {
+                        transaction.rollback()?;  // 失败，事务回滚
+                        Err(e)
+                    }
+                }
             }
         }
     }

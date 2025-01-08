@@ -146,6 +146,17 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         ).transpose()?;
         Ok(value)
     }
+
+    fn get_all_table_names(&self) -> Result<Vec<String>> {
+        let prefix = PrefixKey::Table.encode()?;
+        let results = self.transaction.prefix_scan(prefix)?;
+        let mut names = Vec::new();
+        for result in results {
+            let table: Table = bincode::deserialize(&result.value)?;
+            names.push(table.name);
+        }
+        Ok(names)
+    }
 }
 
 // 辅助方法：由于底层的存储的传入参数都是 u8, 用户给的字符串需要进行转换
