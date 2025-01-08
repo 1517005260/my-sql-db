@@ -39,6 +39,7 @@ impl Planner {
                                     nullable,
                                     default,
                                     is_primary_key: c.is_primary_key,
+                                    is_index: true,
                                 }
                             }).collect(),
                     }

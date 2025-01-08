@@ -76,6 +76,7 @@ pub struct Column{
     pub nullable: bool,
     pub default: Option<Value>,
     pub is_primary_key: bool,
+    pub is_index: bool,
 }
 
 impl Display for Column{
