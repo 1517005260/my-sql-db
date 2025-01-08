@@ -124,8 +124,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 多行命令输入变量
     let mut multiline = String::new();
     loop {
-        let prompt = if multiline.is_empty() { "sql-db>> " } else { ".......> " };
-        let readline = editor.readline(prompt);
+        let prompt = if multiline.is_empty() {
+            match client.transaction_version {
+                Some(version) => format!("transaction#{}>> ", version),
+                None => "sql-db>> ".to_string(),
+            }
+        } else {
+            ".......> ".to_string()
+        };
+        let readline = editor.readline(&prompt);
 
         match readline {
             Ok(line) => {
@@ -169,12 +176,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 pub struct Client {
     stream: TcpStream,
+    transaction_version: Option<u64>,
 }
 
 impl Client {
     pub async fn new(address: SocketAddr) -> Result<Self, Box<dyn Error>> {
         let stream = TcpStream::connect(address).await?;
-        Ok(Self { stream })
+        Ok(Self { stream , transaction_version: None })
     }
 
     pub async fn exec_cmd(&mut self, cmd: &str) -> Result<(), Box<dyn Error>> {
@@ -189,6 +197,17 @@ impl Client {
         while let Some(val) = stream.try_next().await? {
             if val == RESPONSE_END {
                 break;
+            }
+            // 解析事务命令
+            if val.starts_with("TRANSACTION"){
+                let args = val.split(" ").collect::<Vec<_>>();
+                if args[2] == "COMMIT" || args[2] == "ROLLBACK" {
+                    self.transaction_version = None;
+                }
+                if args[2] == "BEGIN" {
+                    let version = args[1].parse::<u64>().unwrap();
+                    self.transaction_version = Some(version);
+                }
             }
             // 打印执行结果
             println!("{}", val);

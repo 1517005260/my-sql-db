@@ -49,6 +49,10 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         self.transaction.rollback()
     }
 
+    fn get_version(&self) -> u64 {
+        self.transaction.get_version()
+    }
+
     fn create_row(&mut self, table_name: String, row: Row) -> Result<()> {
         let table = self.must_get_table(table_name.clone())?;
         // 插入行数据的数据类型检查

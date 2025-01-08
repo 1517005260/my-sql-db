@@ -99,6 +99,9 @@ pub enum Keyword {
     Having,
     Show,
     Tables,
+    Begin,
+    Commit,
+    Rollback,
 }
 
 // word -> Keyword
@@ -149,6 +152,9 @@ impl Keyword {
                 "HAVING" => Keyword::Having,
                 "SHOW" => Keyword::Show,
                 "TABLES" => Keyword::Tables,
+                "BEGIN" => Keyword::Begin,
+                "COMMIT" => Keyword::Commit,
+                "ROLLBACK" => Keyword::Rollback,
                 _ => return None,
             }
         )
@@ -201,6 +207,9 @@ impl Keyword {
             Keyword::Having => "HAVING",
             Keyword::Show => "SHOW",
             Keyword::Tables => "TABLES",
+            Keyword::Begin => "BEGIN",
+            Keyword::Commit => "COMMIT",
+            Keyword::Rollback => "ROLLBACK",
         }
     }
 }

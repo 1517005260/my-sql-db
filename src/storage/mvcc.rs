@@ -84,7 +84,6 @@ impl MvccKeyPrefix {
 }
 
 impl<E:Engine> MvccTransaction<E> {
-
     // 开启事务
     pub fn begin(eng: Arc<Mutex<E>>) -> Result<Self> {
         // 1. 获取存储引擎
@@ -108,6 +107,11 @@ impl<E:Engine> MvccTransaction<E> {
             active_version,
             }
         })
+    }
+
+    // 获取事务版本号
+    pub fn get_version(&self) -> u64{
+        self.state.version
     }
 
     // 获取活跃事务辅助方法

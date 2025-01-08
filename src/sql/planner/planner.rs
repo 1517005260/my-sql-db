@@ -144,6 +144,9 @@ impl Planner {
 
             Sentence::TableSchema {table_name} => Node::TableSchema {name: table_name},
             Sentence::TableNames { } => Node::TableNames {},
+            Sentence::Begin{} | Sentence::Commit{} | Sentence::Rollback{} => {
+                return Err(Error::Internal("[Planner] Unexpected transaction command".into()));
+            },
         })
         }
 

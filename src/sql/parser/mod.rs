@@ -48,6 +48,9 @@ impl<'a> Parser<'a> {
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
             Some(Token::Keyword(Keyword::Delete)) => self.parse_delete(),
             Some(Token::Keyword(Keyword::Show)) => self.parse_show(),
+            Some(Token::Keyword(Keyword::Begin)) => self.parse_transaction(),
+            Some(Token::Keyword(Keyword::Commit)) => self.parse_transaction(),
+            Some(Token::Keyword(Keyword::Rollback)) => self.parse_transaction(),
             Some(token) => Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),  // 其他token
             None => Err(Error::Parse("[Parser] Unexpected EOF".to_string()))
         }
@@ -311,6 +314,17 @@ impl<'a> Parser<'a> {
             Token::Keyword(Keyword::Table) => Ok(TableSchema {table_name: self.expect_next_is_ident()?}),
             _ => Err(Error::Internal("[Parser] Unexpected token".to_string()))
         }
+    }
+
+    // 分类：事务命令
+    fn parse_transaction(&mut self) -> Result<Sentence>{
+        let sentence = match self.next()? {
+            Token::Keyword(Keyword::Begin) => Sentence::Begin{},
+            Token::Keyword(Keyword::Commit) => Sentence::Commit{},
+            Token::Keyword(Keyword::Rollback) => Sentence::Rollback{},
+            _ => return Err(Error::Internal("[Parser] Unknown transaction command".to_string()))
+        };
+        Ok(sentence)
     }
 
     fn parse_select_condition(&mut self) -> Result<Vec<(Expression, Option<String>)>>{

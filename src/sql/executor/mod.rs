@@ -6,7 +6,6 @@ mod aggregate;
 mod calculate;
 mod show;
 
-use rustyline::hint::Hint;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::aggregate::Aggregate;
@@ -46,6 +45,15 @@ pub enum ResultSet{
     },
     TableNames{
         names: Vec<String>,
+    },
+    Begin{
+        version: u64,
+    },
+    Commit{
+        version: u64,
+    },
+    Rollback{
+        version: u64,
     },
 }
 
@@ -101,6 +109,9 @@ impl ResultSet {
                     names.join("\n")
                 }
             },
+            ResultSet::Begin {version} => format!("TRANSACTION {} BEGIN", version),
+            ResultSet::Commit {version} => format!("TRANSACTION {} COMMIT", version),
+            ResultSet::Rollback {version} => format!("TRANSACTION {} ROLLBACK", version),
         }
     }
 }

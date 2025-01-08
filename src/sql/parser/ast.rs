@@ -119,6 +119,13 @@ pub enum Sentence{
     TableNames{
         // 没有参数，因为是全体表
     },
+    Begin{
+        //  没有参数，因为事务号是底层mvcc自动增加的
+    },
+    Commit{
+    },
+    Rollback{
+    },
 }
 
 // 解析表达式
