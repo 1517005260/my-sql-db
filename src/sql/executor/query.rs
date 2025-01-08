@@ -177,7 +177,7 @@ impl<T:Transaction> Limit<T> {
 impl<T:Transaction> Executor<T> for Limit<T>{
     fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
         match self.source.execute(transaction){
-            Ok(ResultSet::Scan {columns, mut rows}) => {
+            Ok(ResultSet::Scan {columns, rows}) => {
                 // 对输出的rows截断即可
                 Ok(
                     ResultSet::Scan {
@@ -205,7 +205,7 @@ impl<T:Transaction> Offset<T> {
 impl<T:Transaction> Executor<T> for Offset<T> {
     fn execute(self: Box<Self>, transaction: &mut T) -> Result<ResultSet> {
         match self.source.execute(transaction){
-            Ok(ResultSet::Scan {columns, mut rows}) => {
+            Ok(ResultSet::Scan {columns, rows}) => {
                 // 对输出rows跳过即可
                 Ok(
                     ResultSet::Scan {

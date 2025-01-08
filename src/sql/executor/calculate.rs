@@ -161,7 +161,7 @@ impl Calculate for Avg {
     }
 
     fn calculate(&self, col_name: &String, cols: &Vec<String>, rows: &Vec<Row>) -> Result<Value> {
-        let pos = match cols.iter().position(|c| *c == *col_name) {
+        let _pos = match cols.iter().position(|c| *c == *col_name) {
             Some(pos) => pos,
             None => return Err(Error::Internal(format!("[Executor] Column {} does not exist", col_name))),
         };

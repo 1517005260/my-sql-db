@@ -117,7 +117,7 @@ impl<T:Transaction> Executor<T> for  Update<T>{
                 // 遍历每行，更新列数据
                 for row in rows{
                     let mut new_row = row.clone();
-                    let mut primary_key = table.get_primary_key(&row)?;
+                    let primary_key = table.get_primary_key(&row)?;
                     for (i ,col) in columns.iter().enumerate(){
                         if let Some(expression) = self.columns.get(col) {
                             // 如果本列需要修改

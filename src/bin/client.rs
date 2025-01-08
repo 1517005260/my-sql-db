@@ -215,3 +215,11 @@ impl Client {
         Ok(())
     }
 }
+
+impl Drop for Client{
+    fn drop(&mut self) {
+        if self.transaction_version.is_some() {
+            futures::executor::block_on(self.exec_cmd("ROLLBACK;")).expect("rollback failed");
+        }
+    }
+}

@@ -38,15 +38,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_i8(self, v: i8) -> Result<()> {
+    fn serialize_i8(self, _v: i8) -> Result<()> {
         todo!()
     }
 
-    fn serialize_i16(self, v: i16) -> Result<()> {
+    fn serialize_i16(self, _v: i16) -> Result<()> {
         todo!()
     }
 
-    fn serialize_i32(self, v: i32) -> Result<()> {
+    fn serialize_i32(self, _v: i32) -> Result<()> {
         todo!()
     }
 
@@ -55,15 +55,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_u8(self, v: u8) -> Result<()> {
+    fn serialize_u8(self, _v: u8) -> Result<()> {
         todo!()
     }
 
-    fn serialize_u16(self, v: u16) -> Result<()> {
+    fn serialize_u16(self, _v: u16) -> Result<()> {
         todo!()
     }
 
-    fn serialize_u32(self, v: u32) -> Result<()> {
+    fn serialize_u32(self, _v: u32) -> Result<()> {
         todo!()
     }
 
@@ -73,21 +73,20 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_f32(self, v: f32) -> Result<()> {
+    fn serialize_f32(self, _v: f32) -> Result<()> {
         todo!()
     }
 
-    fn serialize_f64(self, v: f64) -> Result<()> {
+    fn serialize_f64(self, _v: f64) -> Result<()> {
         todo!()
     }
 
-    fn serialize_char(self, v: char) -> Result<()> {
+    fn serialize_char(self, _v: char) -> Result<()> {
         todo!()
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {
-        self.output.extend(v.as_bytes());
-        Ok(())
+        self.serialize_bytes(v.as_bytes())
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<()> {
@@ -110,7 +109,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         todo!()
     }
 
-    fn serialize_some<T>(self, value: &T) -> Result<()>
+    fn serialize_some<T>(self, _value: &T) -> Result<()>
     where
         T: ?Sized + Serialize
     {
@@ -121,7 +120,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         todo!()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<()> {
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<()> {
         todo!()
     }
 
@@ -136,12 +135,12 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Version,              // 3
         }
     **/
-    fn serialize_unit_variant(self, name: &'static str, variant_index: u32, variant: &'static str) -> Result<()> {
+    fn serialize_unit_variant(self, _name: &'static str, variant_index: u32, _variant: &'static str) -> Result<()> {
         self.output.extend(u8::try_from(variant_index));   // 直接将index转为u8即可
         Ok(())
     }
 
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<()>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, _value: &T) -> Result<()>
     where
         T: ?Sized + Serialize
     {
@@ -157,33 +156,33 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         value.serialize(self)  // 根据value的类型自动进行序列化，这里已知Version就是u64，所以就是在调之前写的序列化u64方法
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
         Ok(self)  // 复杂类型的序列化，以递归地自定义地trait为准
     }
 
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple> {
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
         Ok(self)
     }
 
-    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct> {
+    fn serialize_tuple_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeTupleStruct> {
         todo!()
     }
 
     // MvccKey::Write(Version, Vec<u8>), 即带元组的枚举类型
-    fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant> {
+    fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, _len: usize) -> Result<Self::SerializeTupleVariant> {
         self.serialize_unit_variant(name, variant_index, variant)?;
         Ok(self)
     }
 
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
         todo!()
     }
 
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
         todo!()
     }
 
-    fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant> {
+    fn serialize_struct_variant(self, _name: &'static str, _variant_index: u32, _variant: &'static str, _len: usize) -> Result<Self::SerializeStructVariant> {
         todo!()
     }
 }
@@ -282,7 +281,7 @@ impl<'de> Deserializer<'de> {
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -299,21 +298,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_bool(v != 0)  // v=0 则 v!=0 == false，反之 v!=0 == true
     }
 
-    fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_i8<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_i16<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_i32<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -329,21 +328,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_i64(v)
     }
 
-    fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_u8<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_u16<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_u32<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -361,21 +360,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_u64(v)  // 把u64传给visitor进行处理，这个visitor可以是反序列化的类
     }
 
-    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -390,7 +389,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_str(&String::from_utf8(bytes)?)
     }
 
-    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -411,28 +410,28 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_bytes(&self.next_bytes()?)
     }
 
-    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_option<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -446,49 +445,49 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_seq(self)
     }
 
-    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value>
+    fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         visitor.visit_seq(self)
     }
 
-    fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> Result<V::Value>
+    fn deserialize_tuple_struct<V>(self, _name: &'static str, _len: usize, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
+    fn deserialize_struct<V>(self, _name: &'static str, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], visitor: V) -> Result<V::Value>
+    fn deserialize_enum<V>(self, _name: &'static str, _variants: &'static [&'static str], visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         visitor.visit_enum(self)
     }
 
-    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_identifier<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
         todo!()
     }
 
-    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_ignored_any<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>
     {
@@ -536,14 +535,14 @@ impl<'de, 'a> VariantAccess<'de> for &mut Deserializer<'de> {
         seed.deserialize(&mut *self)
     }
 
-    fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value>
+    fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
         visitor.visit_seq(self)
     }
 
-    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
+    fn struct_variant<V>(self, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {

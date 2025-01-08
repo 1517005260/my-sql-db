@@ -68,10 +68,16 @@ impl ResultSet {
                 // 先找到列名的长度
                 let mut max_len = columns.iter().map(|c| c.len()).collect::<Vec<usize>>();
                 // 然后将列名和行数据进行比较，选出最长的那个
-                for a_row in rows{
-                    for(i, v) in a_row.iter().enumerate(){
-                        if v.to_string().len() > max_len[i]{
-                            max_len[i] = v.to_string().len();
+                for a_row in rows {
+                    for(i, v) in a_row.iter().enumerate() {
+                        // 确保 i 在 max_len.len() 范围内
+                        if i < max_len.len() {
+                            if v.to_string().len() > max_len[i] {
+                                max_len[i] = v.to_string().len();
+                            }
+                        } else {
+                            // 如果发现列数不匹配，扩展 max_len
+                            max_len.push(v.to_string().len());
                         }
                     }
                 }
