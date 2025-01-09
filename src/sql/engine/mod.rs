@@ -1,5 +1,6 @@
 pub mod kv;
 
+use std::collections::HashSet;
 use crate::error::{Error, Result};
 use crate::error::Error::Internal;
 use crate::sql::executor::ResultSet;
@@ -58,6 +59,11 @@ pub trait Transaction {
         self.get_table(table_name.clone())?.  // ok_or : Option -> Result
             ok_or(Error::Internal(format!("[Get Table] Table \" {} \" does not exist",table_name)))
     }
+
+    // 索引相关方法
+    fn load_index(&self, table_name: &str, col_name: &str, col_value: &Value) -> Result<HashSet<Value>>;
+    fn save_index(&mut self, table_name: &str, col_name: &str, col_value: &Value, index: HashSet<Value>) -> Result<()>;
+    fn read_row_by_pk(&self, table_name: &str, pk: &Value) -> Result<Option<Row>>;
 }
 
 pub struct Session<E:Engine>{
@@ -98,13 +104,13 @@ impl<E:Engine + 'static> Session<E> {
             },
             sentence if self.transaction.is_some() =>{
                 // 在事务内的sql
-                Plan::build(sentence)?.execute(self.transaction.as_mut().unwrap())
+                Plan::build(sentence, self.transaction.as_mut().unwrap())?.execute(self.transaction.as_mut().unwrap())
             },
             sentence => {         //  获取到了一句无显式事务的sql
                 let mut transaction = self.engine.begin()?;  // 开启事务
 
                 // 开始构建plan
-                match Plan::build(sentence)?.    // 这里获得一个node
+                match Plan::build(sentence, &mut transaction)?.    // 这里获得一个node
                     execute(&mut transaction) {
                     Ok(res) => {
                         transaction.commit()?;  // 成功，事务提交

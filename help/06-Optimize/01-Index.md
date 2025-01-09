@@ -196,7 +196,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
         for (i, index_col) in index_cols {
             // 加载旧row
-            if let Some(old_row) = self.read_row_by_pk(&table.name, primary_key){
+            if let Some(old_row) = self.read_row_by_pk(&table.name, primary_key)?{
                 if old_row[i] == row[i] {continue;} // 没有更新索引列
 
                 // 更新了索引列
@@ -221,7 +221,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         // 删除数据之前先删索引
         let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
         for (i, index_col) in index_cols {
-            if let Some(row) = self.read_row_by_pk(&table.name, primary_key){
+            if let Some(row) = self.read_row_by_pk(&table.name, primary_key)?{
                 let mut index = self.load_index(&table.name, &index_col.name, &row[i])?;
                 index.remove(primary_key);
                 self.save_index(&table.name, &index_col.name, &row[i] ,index)?; // 修改后的索引重新存储

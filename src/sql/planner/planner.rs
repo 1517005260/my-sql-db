@@ -1,16 +1,19 @@
-use crate::sql::parser::ast::{Expression, FromItem, JoinType, Sentence};
+use crate::sql::parser::ast::{Expression, FromItem, JoinType, Operation, Sentence};
 use crate::sql::planner::{Node, Plan};
 use crate::sql::schema;
 use crate::sql::schema::Table;
 use crate::sql::types::Value;
 use crate::error::{Result, Error};
+use crate::sql::engine::Transaction;
 use crate::sql::parser::ast;
 
-pub struct Planner;  // 辅助Plan的结构体
+pub struct Planner<'a, T: Transaction>{   // 辅助Plan的结构体
+    transaction: &'a mut T,
+}
 
-impl Planner {
-    pub fn new() -> Self {
-        Self
+impl<'a, T:Transaction> Planner<'a, T> {
+    pub fn new(transaction: &'a mut T) -> Self {
+        Self{transaction }
     }
 
     pub fn build(&mut self, sentence: Sentence) -> Result<Plan>{
@@ -39,7 +42,7 @@ impl Planner {
                                     nullable,
                                     default,
                                     is_primary_key: c.is_primary_key,
-                                    is_index: true,
+                                    is_index: c.is_index && !c.is_primary_key,  // 主键不能建索引
                                 }
                             }).collect(),
                     }
@@ -133,14 +136,14 @@ impl Planner {
             Sentence::Update {table_name, columns, condition} =>
             Node::Update {
                 table_name: table_name.clone(),
-                scan: Box::new(Node::Scan {table_name, filter: condition}),
+                scan: Box::new(self.build_scan_or_index(table_name, condition)?),
                 columns,
             },
 
             Sentence::Delete {table_name, condition} =>
                 Node::Delete {
                     table_name:table_name.clone(),
-                    scan: Box::new(Node::Scan {table_name, filter: condition})
+                    scan: Box::new(self.build_scan_or_index(table_name, condition)?)
                 },
 
             Sentence::TableSchema {table_name} => Node::TableSchema {name: table_name},
@@ -154,7 +157,7 @@ impl Planner {
     // 将from_item变成plan_node
     fn build_from_item(&mut self, item: FromItem, filter: &Option<Expression>) -> Result<Node>{
         let node = match item {
-            FromItem::Table { name } => Node::Scan {table_name:name, filter: filter.clone()},
+            FromItem::Table { name } => self.build_scan_or_index(name, filter.clone())?,
             FromItem::Join { left, right, join_type, condition } => {
                 // 优化： a right join b == b left join a， 这样一套逻辑就可以复用
                 let (left, right) = match join_type {
@@ -176,5 +179,54 @@ impl Planner {
             },
         };
         Ok(node)
+    }
+
+    // 根据filter条件判断是否可以走索引
+    fn build_scan_or_index(&self, table_name: String, filter: Option<Expression>) -> Result<Node>{
+        let node = match Self::parse_filter(filter.clone()) {
+            Some((col, val)) => {
+                // 即使条件是 b=2，但是若不是索引列，也不能走索引
+                let table = self.transaction.must_get_table(table_name.clone())?;
+                match table.columns.iter().position(|c| *c.name == col && c.is_index){
+                    Some(_) => {
+                        // 本列有索引
+                        Node::ScanIndex{table_name, col_name: col, value: val}
+                    },
+                    None => Node::Scan {table_name, filter},
+                }
+            },
+            None => Node::Scan {table_name, filter},
+        };
+        Ok(node)
+    }
+
+    // 解析上个函数的filter表达式
+    // 实际上我们的hash索引仅支持 b=2 的条件，也即Expression::Operation::Equal
+    fn parse_filter(filter: Option<Expression>) -> Option<(String, Value)>{
+        match filter {
+            Some(expr) => {
+                match expr {
+                    // 解析右边的常数
+                    Expression::Consts(val) => Some(("".into(), Value::from_expression_to_value(Expression::Consts(val)))),
+                    // 解析左边的列名
+                    Expression::Field(col) => Some((col, Value::Null)),
+                    Expression::Operation(operation) => {
+                        match operation {
+                            Operation::Equal(col, val) => {
+                                // 递归调用进行解析
+                                let left = Self::parse_filter(Some(*col));
+                                let right = Self::parse_filter(Some(*val));
+
+                                // 左边为(col, null)，右边为("", val)，现在进行组合
+                                Some((left.unwrap().0, right.unwrap().1))
+                            },
+                            _ => None,
+                        }
+                    },
+                    _ => None,
+                }
+            },
+            None => None,
+        }
     }
 }

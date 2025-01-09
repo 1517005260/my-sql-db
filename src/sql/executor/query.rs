@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::cmp::Ordering::Equal;
 use std::collections::HashMap;
 use crate::error::Result;
@@ -29,6 +30,44 @@ impl<T:Transaction> Executor<T> for Scan{
                 rows,
             }
         )
+    }
+}
+
+pub struct ScanIndex{
+    table_name: String,
+    col_name: String,
+    value: Value,
+}
+
+impl ScanIndex{
+    pub fn new(table_name: String, col_name: String, value: Value) -> Box<Self>{
+        Box::new(Self{ table_name, col_name, value })
+    }
+}
+
+impl<T:Transaction> Executor<T> for ScanIndex{
+    fn execute(self:Box<Self>,trasaction: &mut T) -> Result<ResultSet> {
+        let table = trasaction.must_get_table(self.table_name.clone())?;
+
+        // 加载 col_name, value 对应的索引情况
+        let index = trasaction.load_index(&self.table_name, &self.col_name, &self.value)?;
+
+        // 由于拿到的是Set，是无序的，我们尽量让它有序
+        // 先转为列表
+        let mut pks = index.iter().collect::<Vec<_>>();
+        pks.sort_by(|v1, v2| v1.partial_cmp(v2).unwrap_or_else(|| Ordering::Equal));
+
+        let mut rows = Vec::new();
+        for pk in pks{
+            if let Some(row) = trasaction.read_row_by_pk(&self.table_name, &pk)? {
+                rows.push(row);
+            }
+        }
+        // println!("index scan");
+        Ok(ResultSet::Scan {
+            columns: table.columns.into_iter().map(|c| c.name.clone()).collect(),
+            rows,
+        })
     }
 }
 

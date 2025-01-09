@@ -105,9 +105,10 @@ impl<'a> Parser<'a> {
             nullable: None,
             default: None,
             is_primary_key: false,
+            is_index: false,
         };
 
-        // 解析是否为空，是否有默认值
+        // 解析是否为空，是否有默认值，是否为主键，是否有索引
         while let Some(Token::Keyword(keyword)) = self.next_if_keyword() {
             match keyword {
                 Keyword::Null => column.nullable = Some(true),
@@ -120,6 +121,7 @@ impl<'a> Parser<'a> {
                     self.expect_next_token_is(Token::Keyword(Keyword::Key))?;  // 关键字为primary key
                     column.is_primary_key = true;
                 },
+                Keyword::Index => column.is_index = true,
                 keyword => return Err(Error::Parse(format!("[Parser] Unexpected keyword {}",keyword))),
             }
         }

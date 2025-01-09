@@ -5,6 +5,7 @@ use crate::sql::executor::{Executor, ResultSet};
 use crate::sql::parser::ast::{Expression, OrderBy, Sentence};
 use crate::sql::planner::planner::Planner;
 use crate::sql::schema::Table;
+use crate::sql::types::Value;
 
 mod planner;
 
@@ -24,6 +25,11 @@ pub enum Node{
         table_name: String,
         // 过滤条件
         filter: Option<Expression>,
+    },
+    ScanIndex{
+        table_name: String,
+        col_name: String,
+        value: Value,
     },
     Update{
         table_name: String,
@@ -79,8 +85,8 @@ pub struct Plan(pub Node);  // 元素结构体，可以通过 let plan = Plan(no
 
 // 实现构建Plan的方法
 impl Plan{
-    pub fn build(sentence: Sentence) -> Result<Self>{
-        Ok(Planner::new().build(sentence)?)
+    pub fn build<T: Transaction>(sentence: Sentence, transaction: &mut T) -> Result<Self>{
+        Ok(Planner::new(transaction).build(sentence)?)
     }
 
     // planner与executor交互，plan节点 -> 执行器结构体
@@ -101,9 +107,16 @@ mod tests {
             planner::{Node, Plan},
         },
     };
+    use crate::sql::engine::Engine;
+    use crate::sql::engine::kv::KVEngine;
+    use crate::storage::disk::DiskEngine;
 
     #[test]
     fn test_plan_create_table() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut transaction = kvengine.begin()?;
+
         let sql1 = "
         create table tbl1 (
             a int default 100,
@@ -113,7 +126,7 @@ mod tests {
         );
         ";
         let sentence1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(sentence1);
+        let p1 = Plan::build(sentence1, &mut transaction);
         println!("{:?}",p1);
 
         let sql2 = "
@@ -125,17 +138,21 @@ mod tests {
         );
         ";
         let sentence2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(sentence2);
+        let p2 = Plan::build(sentence2, &mut transaction);
         assert_eq!(p1, p2);
-
+        std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
 
     #[test]
     fn test_plan_insert() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut transaction = kvengine.begin()?;
+
         let sql1 = "insert into tbl1 values (1, 2, 3, 'a', true);";
         let sentence1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(sentence1)?;
+        let p1 = Plan::build(sentence1,&mut transaction)?;
         assert_eq!(
             p1,
             Plan(Node::Insert {
@@ -153,7 +170,7 @@ mod tests {
 
         let sql2 = "insert into tbl2 (c1, c2, c3) values (3, 'a', true),(4, 'b', false);";
         let sentence2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(sentence2)?;
+        let p2 = Plan::build(sentence2, &mut transaction)?;
         assert_eq!(
             p2,
             Plan(Node::Insert {
@@ -173,23 +190,27 @@ mod tests {
                 ],
             })
         );
-
+        std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
 
     #[test]
     fn test_plan_select() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut transaction = kvengine.begin()?;
+
         let sql = "select * from tbl1;";
         let sentence = Parser::new(sql).parse()?;
-        let p = Plan::build(sentence)?;
+        let plan = Plan::build(sentence, &mut transaction)?;
         assert_eq!(
-            p,
+            plan,
             Plan(Node::Scan {
                 table_name: "tbl1".to_string(),
                 filter: None,
             })
         );
-
+        std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
 }

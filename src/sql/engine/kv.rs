@@ -103,7 +103,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
         for (i, index_col) in index_cols {
             // 加载旧row
-            if let Some(old_row) = self.read_row_by_pk(&table.name, primary_key){
+            if let Some(old_row) = self.read_row_by_pk(&table.name, primary_key)?{
                 if old_row[i] == row[i] {continue;} // 没有更新索引列
 
                 // 更新了索引列
@@ -128,7 +128,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         // 删除数据之前先删索引
         let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
         for (i, index_col) in index_cols {
-            if let Some(row) = self.read_row_by_pk(&table.name, primary_key){
+            if let Some(row) = self.read_row_by_pk(&table.name, primary_key)?{
                 let mut index = self.load_index(&table.name, &index_col.name, &row[i])?;
                 index.remove(primary_key);
                 self.save_index(&table.name, &index_col.name, &row[i] ,index)?; // 修改后的索引重新存储
@@ -202,9 +202,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         }
         Ok(names)
     }
-}
 
-impl<E:storageEngine> KVTransaction<E> {
     fn load_index(&self, table_name: &str, col_name: &str, col_value: &Value) -> Result<HashSet<Value>>{
         // 加载Index_key，并进行反序列化
         let key = Key::Index(table_name.into(), col_name.into(), col_value.clone()).encode()?;
@@ -813,6 +811,32 @@ mod tests {
             ResultSet::Scan { columns, rows } => {
                 assert_eq!(2, columns.len());
                 assert_eq!(3, rows.len());
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_index() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut s = kvengine.session()?;
+        s.execute("create table t (a int primary key, b text index, c float index, d bool);")?;
+        s.execute("insert into t values (1, 'a', 1.1, true);")?;
+        s.execute("insert into t values (2, 'b', 2.1, true);")?;
+        s.execute("insert into t values (3, 'a', 3.2, false);")?;
+        s.execute("insert into t values (4, 'c', 1.1, true);")?;
+        s.execute("insert into t values (5, 'd', 2.1, false);")?;
+
+        s.execute("delete from t where a = 4;")?;
+
+        match s.execute("select * from t where c = 1.1;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(columns.len(), 4);
+                assert_eq!(rows.len(), 1);
             }
             _ => unreachable!(),
         }

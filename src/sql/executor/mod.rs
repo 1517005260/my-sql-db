@@ -11,7 +11,7 @@ use crate::sql::engine::Transaction;
 use crate::sql::executor::aggregate::Aggregate;
 use crate::sql::executor::join::NestedLoopJoin;
 use crate::sql::executor::mutation::{Delete, Insert, Update};
-use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection, Having};
+use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection, Having, ScanIndex};
 use crate::sql::executor::schema::CreateTable;
 use crate::sql::executor::show::{TableNames, TableSchema};
 use crate::sql::planner::Node;
@@ -142,6 +142,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::Having {source, condition} => Having::new(Self::build(*source), condition),
             Node::TableSchema {name} => TableSchema::new(&name),
             Node::TableNames { } => TableNames::new(),
+            Node::ScanIndex { table_name, col_name, value} => ScanIndex::new(table_name, col_name, value),
         }
     }
 }

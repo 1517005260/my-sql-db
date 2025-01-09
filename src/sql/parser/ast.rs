@@ -12,6 +12,7 @@ pub struct Column{            // 列的各种属性
     pub nullable: Option<bool>, // 列是否为空
     pub default: Option<Expression>, // 列的默认值
     pub is_primary_key: bool,       // 本列是否为主键
+    pub is_index: bool,             // 本列是否为索引
 }
 
 // 目前表达式为了简单，仅支持常量，不支持：insert into Table_A value(11 * 11 + 2) 等
