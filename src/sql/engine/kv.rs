@@ -866,4 +866,29 @@ mod tests {
         std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
+
+    #[test]
+    fn test_hash_join() -> Result<()> {
+        let p = tempfile::tempdir()?.into_path().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut s = kvengine.session()?;
+        s.execute("create table t1 (a int primary key);")?;
+        s.execute("create table t2 (b int primary key);")?;
+        s.execute("create table t3 (c int primary key);")?;
+
+        s.execute("insert into t1 values (1), (2), (3);")?;
+        s.execute("insert into t2 values (2), (3), (4);")?;
+        s.execute("insert into t3 values (3), (8), (9);")?;
+
+        match s.execute("select * from t1 join t2 on a = b join t3 on a = c;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(columns.len(), 3);
+                assert_eq!(rows.len(), 1);
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
 }

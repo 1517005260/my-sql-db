@@ -6,6 +6,7 @@ use crate::sql::types::Value;
 use crate::error::{Result, Error};
 use crate::sql::engine::Transaction;
 use crate::sql::parser::ast;
+use crate::sql::parser::ast::JoinType::Cross;
 
 pub struct Planner<'a, T: Transaction>{   // 辅助Plan的结构体
     transaction: &'a mut T,
@@ -170,12 +171,22 @@ impl<'a, T:Transaction> Planner<'a, T> {
                     _ => true,
                 };
 
-                Node::NestedLoopJoin {
-                    left: Box::new(self.build_from_item(*left, filter)?),
-                    right: Box::new(self.build_from_item(*right, filter)?),
-                    condition,
-                    outer,
+                if join_type == Cross{
+                    Node::NestedLoopJoin {
+                        left: Box::new(self.build_from_item(*left, filter)?),
+                        right: Box::new(self.build_from_item(*right, filter)?),
+                        condition,
+                        outer,
+                    }
+                }else {
+                    Node::HashJoin{
+                        left: Box::new(self.build_from_item(*left, filter)?),
+                        right: Box::new(self.build_from_item(*right, filter)?),
+                        condition,
+                        outer,
+                    }
                 }
+
             },
         };
         Ok(node)

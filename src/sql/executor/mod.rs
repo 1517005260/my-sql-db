@@ -9,7 +9,7 @@ mod show;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::aggregate::Aggregate;
-use crate::sql::executor::join::NestedLoopJoin;
+use crate::sql::executor::join::{HashJoin, NestedLoopJoin};
 use crate::sql::executor::mutation::{Delete, Insert, Update};
 use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection, Having, ScanIndex, PkIndex};
 use crate::sql::executor::schema::CreateTable;
@@ -144,6 +144,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
             Node::TableNames { } => TableNames::new(),
             Node::ScanIndex { table_name, col_name, value} => ScanIndex::new(table_name, col_name, value),
             Node::PkIndex { table_name, value } => PkIndex::new(table_name, value),
+            Node::HashJoin { left, right, condition, outer } => HashJoin::new(Self::build(*left), Self::build(*right), condition, outer),
         }
     }
 }

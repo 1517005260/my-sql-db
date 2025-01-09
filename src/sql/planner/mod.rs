@@ -66,6 +66,12 @@ pub enum Node{
         condition: Option<Expression>,
         outer: bool,
     },
+    HashJoin{    // HashJoin节点，时间复杂度O(m+n)
+        left: Box<Node>,
+        right: Box<Node>,
+        condition: Option<Expression>,
+        outer: bool,
+    },
     Aggregate{  // 聚集函数节点
         source: Box<Node>,
         expression: Vec<(Expression, Option<String>)>,  // Function, 别名
