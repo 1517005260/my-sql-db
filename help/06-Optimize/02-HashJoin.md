@@ -172,7 +172,7 @@ impl<T:Transaction> Executor<T> for HashJoin<T>{
                             // 未匹配到，如果是外连接需要展示为null
                             if self.outer{
                                 let mut row = row.clone();
-                                for _ in 0..right_rows[0].len() {
+                                for _ in 0..right_cols.len() {
                                     row.push(Value::Null);
                                 }
                                 new_rows.push(row);

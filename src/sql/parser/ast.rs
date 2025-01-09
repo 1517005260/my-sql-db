@@ -90,6 +90,9 @@ pub enum Sentence{
         name: String,               // 表名
         columns: Vec<Column>,       // 表的列
     },
+    DropTable{
+        name: String,
+    },
     Insert{
         table_name: String,           // 目标表名
         columns: Option<Vec<String>>,  // 目标列，可以为空

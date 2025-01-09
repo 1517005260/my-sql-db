@@ -184,6 +184,20 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         Ok(())
     }
 
+    fn drop_table(&mut self, name: String)-> Result<()>{
+        // 获取表
+        let table = self.must_get_table(name.clone())?;
+        // 获取表的数据
+        let rows = self.scan(name, None)?;
+        // 删除表的数据
+        for row in rows {
+            self.delete_row(&table, &table.get_primary_key(&row)?)?;
+        }
+        // 删除表结构定义
+        let key = Key::Table(table.name).encode()?;
+        self.transaction.delete(key)
+    }
+
     fn get_table(&self, table_name: String) -> Result<Option<Table>> {
         let key = Key::Table(table_name).encode()?;
         let value = self.transaction.get(key)?.map(

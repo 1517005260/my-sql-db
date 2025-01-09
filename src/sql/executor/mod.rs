@@ -12,7 +12,7 @@ use crate::sql::executor::aggregate::Aggregate;
 use crate::sql::executor::join::{HashJoin, NestedLoopJoin};
 use crate::sql::executor::mutation::{Delete, Insert, Update};
 use crate::sql::executor::query::{Limit, Offset, Order, Scan, Projection, Having, ScanIndex, PkIndex};
-use crate::sql::executor::schema::CreateTable;
+use crate::sql::executor::schema::{CreateTable, DropTable};
 use crate::sql::executor::show::{TableNames, TableSchema};
 use crate::sql::planner::Node;
 use crate::sql::types::Row;
@@ -26,6 +26,9 @@ pub trait Executor<T:Transaction>{
 pub enum ResultSet{
     CreateTable{
         table_name: String,   // 创建表成功，则返回表名
+    },
+    DropTable{
+        table_name: String,
     },
     Insert{
         count: usize,         // 插入表成功，则返回插入数
@@ -61,6 +64,7 @@ impl ResultSet {
     pub fn to_string(&self) -> String {
         match self {
             ResultSet::CreateTable { table_name } => format!("CREATE TABLE {}", table_name),  // 创建成功提示
+            ResultSet::DropTable { table_name } => format!("DROP TABLE {}", table_name),
             ResultSet::Insert { count } => format!("INSERT {} rows", count),                  // 插入成功提示
             ResultSet::Scan { columns, rows } => { // 返回扫描结果
                 let rows_len = rows.len();   // 一共多少行
@@ -126,6 +130,7 @@ impl<T:Transaction + 'static> dyn Executor<T>{
     pub fn build(node: Node) -> Box<dyn Executor<T>>{
         match node {
             Node::CreateTable {schema} => CreateTable::new(schema),
+            Node::DropTable { name } => DropTable::new(name),
             Node::Insert {table_name,columns,values} => Insert::new(table_name, columns, values),
             Node::Scan {table_name,filter} => Scan::new(table_name,filter),
             Node::Update {table_name, scan, columns} =>

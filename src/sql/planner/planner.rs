@@ -49,6 +49,8 @@ impl<'a, T:Transaction> Planner<'a, T> {
                     }
                 },
 
+            Sentence::DropTable {name} => Node::DropTable {name},
+
             Sentence::Insert { table_name, columns, values, } =>
                 Node::Insert {
                     table_name,

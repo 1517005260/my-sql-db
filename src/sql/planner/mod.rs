@@ -15,6 +15,9 @@ pub enum Node{
     CreateTable{
         schema: Table,
     },
+    DropTable{
+        name: String,
+    },
     Insert{
         table_name: String,
         columns: Vec<String>,

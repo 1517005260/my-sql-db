@@ -43,6 +43,7 @@ impl<'a> Parser<'a> {
         // 我们尝试查看第一个Token以进行分类
         match self.peek()? {
             Some(Token::Keyword(Keyword::Create)) => self.parse_ddl(),
+            Some(Token::Keyword(Keyword::Drop)) => self.parse_ddl(),
             Some(Token::Keyword(Keyword::Select)) => self.parse_select(),
             Some(Token::Keyword(Keyword::Insert)) => self.parse_insert(),
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
@@ -63,7 +64,11 @@ impl<'a> Parser<'a> {
                 Token::Keyword(Keyword::Table) => self.parse_ddl_create_table(),  // CREATE TABLE
                 token => Err(Error::Parse(format!("[Parser] Unexpected token {}", token))),  // 语法错误
             },
-            token => Err(Error::Parse(format!("[Parser] Unexpected token {}", token))),  // 其他如drop等暂未实现
+            Token::Keyword(Keyword::Drop) => match self.next()? {
+                Token::Keyword(Keyword::Table) => self.parse_ddl_drop_table(),  // DROP TABLE
+                token => Err(Error::Parse(format!("[Parser] Unexpected token {}", token))),
+            },
+            token => Err(Error::Parse(format!("[Parser] Unexpected token {}", token))),
         }
     }
 
@@ -126,6 +131,14 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(column)
+    }
+
+    // 解析Drop Table 语句
+    fn parse_ddl_drop_table(&mut self) -> Result<Sentence>{
+        let table_name = self.expect_next_is_ident()?;
+        Ok(Sentence::DropTable {
+            name: table_name,
+        })
     }
 
     // 解析表达式

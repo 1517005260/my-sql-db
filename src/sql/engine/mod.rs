@@ -47,6 +47,7 @@ pub trait Transaction {
 
     // DDL
     fn create_table(&mut self, table:Table)-> Result<()>;
+    fn drop_table(&mut self, name: String)-> Result<()>;
 
     // 获取表的信息
     fn get_table(&self, table_name:String)-> Result<Option<Table>>;

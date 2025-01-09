@@ -19,3 +19,20 @@ impl<T:Transaction> Executor<T> for CreateTable{
         Ok(ResultSet::CreateTable{table_name})
     }
 }
+
+pub struct DropTable{
+    name: String,
+}
+
+impl DropTable{
+    pub fn new(name: String) -> Box<Self> {
+        Box::new(Self {name})
+    }
+}
+
+impl<T:Transaction> Executor<T> for DropTable{
+    fn execute(self:Box<Self>,transaction:&mut T) -> crate::error::Result<ResultSet> {
+        transaction.drop_table(self.name.clone())?;
+        Ok(ResultSet::DropTable {table_name: self.name})
+    }
+}

@@ -217,7 +217,7 @@ fn parse_show(&mut self) -> Result<Sentence>{
 ```rust
 #[derive(Debug,PartialEq)]
 pub enum Node{
-    ableSchema{
+    TableSchema{
         name: String,
     },
     TableNames{
