@@ -31,6 +31,10 @@ pub enum Node{
         col_name: String,
         value: Value,
     },
+    PkIndex{
+        table_name: String,
+        value: Value,
+    },
     Update{
         table_name: String,
         scan: Box<Node>,

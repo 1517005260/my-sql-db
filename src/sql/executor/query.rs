@@ -71,6 +71,34 @@ impl<T:Transaction> Executor<T> for ScanIndex{
     }
 }
 
+pub struct PkIndex{
+    table_name: String,
+    value: Value,
+}
+
+impl PkIndex {
+    pub fn new(table_name: String, value: Value) -> Box<Self>{
+        Box::new(Self{ table_name, value })
+    }
+}
+
+impl<T:Transaction> Executor<T> for PkIndex{
+    fn execute(self:Box<Self>,trasaction: &mut T) -> Result<ResultSet> {
+        let table = trasaction.must_get_table(self.table_name.clone())?;
+        let mut rows = Vec::new();
+        if let Some(row) = trasaction.read_row_by_pk(&self.table_name, &self.value)?{
+            rows.push(row);
+        }
+
+        // println!("pk index");
+
+        Ok(ResultSet::Scan {
+            columns: table.columns.into_iter().map(|c| c.name.clone()).collect(),
+            rows,
+        })
+    }
+}
+
 pub struct Having<T: Transaction>{
     source: Box<dyn Executor<T>>,
     condition: Expression,

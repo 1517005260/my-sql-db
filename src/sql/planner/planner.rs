@@ -187,6 +187,14 @@ impl<'a, T:Transaction> Planner<'a, T> {
             Some((col, val)) => {
                 // 即使条件是 b=2，但是若不是索引列，也不能走索引
                 let table = self.transaction.must_get_table(table_name.clone())?;
+
+                // 如果是主键，那走主键索引
+                if table.columns.iter().position(|c| c.name == col && c.is_primary_key).is_some(){
+                    return Ok(
+                        Node::PkIndex {table_name, value: val}
+                    )
+                }
+
                 match table.columns.iter().position(|c| *c.name == col && c.is_index){
                     Some(_) => {
                         // 本列有索引
