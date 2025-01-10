@@ -1,9 +1,12 @@
-use std::ops::{Bound, RangeBounds};
 use crate::error::Result;
+use std::ops::{Bound, RangeBounds};
 
-pub trait Engine{   // 抽象存储引擎接口定义，对接内存/磁盘
+pub trait Engine {
+    // 抽象存储引擎接口定义，对接内存/磁盘
     // 需要实现一个存储引擎迭代器
-    type EngineIter<'a>: EngineIter where Self: 'a;  //EngineIter 的生命周期不能超过它所在的 Engine 的生命周期
+    type EngineIter<'a>: EngineIter
+    where
+        Self: 'a; //EngineIter 的生命周期不能超过它所在的 Engine 的生命周期
 
     // 增
     fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
@@ -15,42 +18,43 @@ pub trait Engine{   // 抽象存储引擎接口定义，对接内存/磁盘
     fn delete(&mut self, key: Vec<u8>) -> Result<()>;
 
     // 扫描
-    fn scan(&mut self,range: impl RangeBounds<Vec<u8>>) -> Self::EngineIter<'_>;  // 自动推断生命周期
-    // RangeBounds用法：
-    // .. 无界范围
-    // a..b [a,b)
-    // a..=b：[a,b]
-    // ..b： (,b)
-    // a..   [a,]
+    fn scan(&mut self, range: impl RangeBounds<Vec<u8>>) -> Self::EngineIter<'_>; // 自动推断生命周期
+                                                                                  // RangeBounds用法：
+                                                                                  // .. 无界范围
+                                                                                  // a..b [a,b)
+                                                                                  // a..=b：[a,b]
+                                                                                  // ..b： (,b)
+                                                                                  // a..   [a,]
 
     // 前缀扫描
-    fn prefix_scan(&mut self, prefix: Vec<u8>) -> Self::EngineIter<'_>{
+    fn prefix_scan(&mut self, prefix: Vec<u8>) -> Self::EngineIter<'_> {
         // abc,abd,abe, 均在 < abf的范围内，即[abc, ab (e+1) )
         let start = Bound::Included(prefix.clone());
         let mut bound_prefix = prefix.clone();
-        let end = match bound_prefix.iter().rposition(|b| *b != 255) {  // 从后往前找第一个不是255的
+        let end = match bound_prefix.iter().rposition(|b| *b != 255) {
+            // 从后往前找第一个不是255的
             Some(pos) => {
                 bound_prefix[pos] += 1;
-                bound_prefix.truncate(pos + 1);  // 从255开始向后丢弃
+                bound_prefix.truncate(pos + 1); // 从255开始向后丢弃
                 Bound::Excluded(bound_prefix)
             }
             None => Bound::Unbounded,
         };
-        self.scan((start,end))
+        self.scan((start, end))
     }
 }
 
-pub trait EngineIter: DoubleEndedIterator<Item=Result<(Vec<u8>,Vec<u8>)>>{}
+pub trait EngineIter: DoubleEndedIterator<Item = Result<(Vec<u8>, Vec<u8>)>> {}
 // 继承了 DoubleEndedIterator，并且指定了迭代器的 Item 类型为 Result<(Vec<u8>, Vec<u8>)>
 // DoubleEnded支持双向扫描
 
 #[cfg(test)]
 mod tests {
     use super::Engine;
+    use crate::storage::disk::DiskEngine;
     use crate::{error::Result, storage::memory::MemoryEngine};
     use std::ops::Bound;
     use std::path::PathBuf;
-    use crate::storage::disk::DiskEngine;
 
     // 测试点读的情况
     fn test_point_opt(mut eng: impl Engine) -> Result<()> {
@@ -144,7 +148,7 @@ mod tests {
     #[test]
     fn test_disk() -> Result<()> {
         test_point_opt(DiskEngine::new(PathBuf::from("./tmp/sqldb1/db.log"))?)?;
-        std::fs::remove_dir_all(PathBuf::from("./tmp/sqldb1"))?;  // 测试完成后删除
+        std::fs::remove_dir_all(PathBuf::from("./tmp/sqldb1"))?; // 测试完成后删除
 
         test_scan(DiskEngine::new(PathBuf::from("./tmp/sqldb2/db.log"))?)?;
         std::fs::remove_dir_all(PathBuf::from("./tmp/sqldb2"))?;

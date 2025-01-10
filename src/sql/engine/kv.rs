@@ -1,47 +1,47 @@
-use std::collections::HashSet;
-use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::sql::engine::{Engine, Transaction};
 use crate::sql::parser::ast::{parse_expression, Expression};
 use crate::sql::schema::Table;
 use crate::sql::types::{Row, Value};
-use crate::storage::{self,engine::Engine as storageEngine};
 use crate::storage::keyencode::serialize_key;
+use crate::storage::{self, engine::Engine as storageEngine};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 // self 即指 crate::storage
 
 // KV engine 定义
-pub struct KVEngine<E:storageEngine> {
-    pub kv : storage::mvcc::Mvcc<E>
+pub struct KVEngine<E: storageEngine> {
+    pub kv: storage::mvcc::Mvcc<E>,
 }
 
-impl<E:storageEngine> Clone for KVEngine<E> {
+impl<E: storageEngine> Clone for KVEngine<E> {
     fn clone(&self) -> Self {
-        Self{kv: self.kv.clone()}
+        Self {
+            kv: self.kv.clone(),
+        }
     }
 }
 
-impl<E:storageEngine> Engine for KVEngine<E> {
+impl<E: storageEngine> Engine for KVEngine<E> {
     type Transaction = KVTransaction<E>;
 
     fn begin(&self) -> Result<Self::Transaction> {
-        Ok(
-            Self::Transaction::new(self.kv.begin()?)
-        )
+        Ok(Self::Transaction::new(self.kv.begin()?))
     }
 }
 
 // 封装存储引擎中的MvccTransaction
-pub struct KVTransaction<E:storageEngine>{
-    transaction : storage::mvcc::MvccTransaction<E>
+pub struct KVTransaction<E: storageEngine> {
+    transaction: storage::mvcc::MvccTransaction<E>,
 }
 
-impl<E:storageEngine> KVTransaction<E>{
+impl<E: storageEngine> KVTransaction<E> {
     pub fn new(transaction: storage::mvcc::MvccTransaction<E>) -> Self {
-        Self{transaction}
+        Self { transaction }
     }
 }
 
-impl<E:storageEngine> Transaction for KVTransaction<E> {
+impl<E: storageEngine> Transaction for KVTransaction<E> {
     fn commit(&self) -> Result<()> {
         self.transaction.commit()
     }
@@ -57,11 +57,21 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
     fn create_row(&mut self, table_name: String, row: Row) -> Result<()> {
         let table = self.must_get_table(table_name.clone())?;
         // 插入行数据的数据类型检查
-        for (i,col) in table.columns.iter().enumerate() {
+        for (i, col) in table.columns.iter().enumerate() {
             match row[i].get_datatype() {
                 None if col.nullable => continue,
-                None => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" cannot be null",col.name))),
-                Some(datatype) if datatype != col.datatype => return Err(Error::Internal(format!("[Insert Table] Column \" {} \" mismatched data type",col.name))),
+                None => {
+                    return Err(Error::Internal(format!(
+                        "[Insert Table] Column \" {} \" cannot be null",
+                        col.name
+                    )))
+                }
+                Some(datatype) if datatype != col.datatype => {
+                    return Err(Error::Internal(format!(
+                        "[Insert Table] Column \" {} \" mismatched data type",
+                        col.name
+                    )))
+                }
                 _ => continue,
             }
         }
@@ -70,8 +80,11 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         let key = Key::Row(table.name.clone(), primary_key.clone()).encode()?;
 
         // 如果主键已经存在，则报冲突
-        if self.transaction.get(key.clone())?.is_some(){
-            return Err(Error::Internal(format!("[Insert Table] Primary Key \" {} \" conflicted in table \" {} \"", primary_key, table_name)));
+        if self.transaction.get(key.clone())?.is_some() {
+            return Err(Error::Internal(format!(
+                "[Insert Table] Primary Key \" {} \" conflicted in table \" {} \"",
+                primary_key, table_name
+            )));
         }
 
         // 存放数据
@@ -80,11 +93,16 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
 
         // 维护索引
         // 找出有索引的列
-        let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
+        let index_cols = table
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.is_index)
+            .collect::<Vec<_>>();
         for (i, index_col) in index_cols {
             let mut index = self.load_index(&table_name, &index_col.name, &row[i])?;
             index.insert(primary_key.clone());
-            self.save_index(&table_name, &index_col.name, &row[i] ,index)?
+            self.save_index(&table_name, &index_col.name, &row[i], index)?
         }
         Ok(())
     }
@@ -93,18 +111,25 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         // 传入的是新row
         // 对比主键是否修改，是则删除原key，建立新key
         let new_primary_key = table.get_primary_key(&row)?;
-        if new_primary_key != *primary_key{
+        if new_primary_key != *primary_key {
             self.delete_row(table, primary_key)?;
             self.create_row(table.name.clone(), row)?;
-            return Ok(())
+            return Ok(());
         }
 
         // 修改的不是主键，需要手动维护索引
-        let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
+        let index_cols = table
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.is_index)
+            .collect::<Vec<_>>();
         for (i, index_col) in index_cols {
             // 加载旧row
-            if let Some(old_row) = self.read_row_by_pk(&table.name, primary_key)?{
-                if old_row[i] == row[i] {continue;} // 没有更新索引列
+            if let Some(old_row) = self.read_row_by_pk(&table.name, primary_key)? {
+                if old_row[i] == row[i] {
+                    continue;
+                } // 没有更新索引列
 
                 // 更新了索引列
                 // 需要先从旧集合中删除，再加入新集合
@@ -126,12 +151,17 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
 
     fn delete_row(&mut self, table: &Table, primary_key: &Value) -> Result<()> {
         // 删除数据之前先删索引
-        let index_cols = table.columns.iter().enumerate().filter(|(_,c)| c.is_index).collect::<Vec<_>>();
+        let index_cols = table
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.is_index)
+            .collect::<Vec<_>>();
         for (i, index_col) in index_cols {
-            if let Some(row) = self.read_row_by_pk(&table.name, primary_key)?{
+            if let Some(row) = self.read_row_by_pk(&table.name, primary_key)? {
                 let mut index = self.load_index(&table.name, &index_col.name, &row[i])?;
                 index.remove(primary_key);
-                self.save_index(&table.name, &index_col.name, &row[i] ,index)?; // 修改后的索引重新存储
+                self.save_index(&table.name, &index_col.name, &row[i], index)?; // 修改后的索引重新存储
             }
         }
 
@@ -149,7 +179,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         for res in results {
             // 根据filter过滤数据
             let row: Row = bincode::deserialize(&res.value)?;
-            if let Some( expression) = &filter {
+            if let Some(expression) = &filter {
                 let cols = table.columns.iter().map(|c| c.name.clone()).collect();
                 match parse_expression(expression, &cols, &row, &cols, &row)? {
                     Value::Null => {}
@@ -157,9 +187,13 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
                     Value::Boolean(true) => {
                         rows.push(row);
                     }
-                    _ => return Err(Error::Internal("[KV Engine Scan] Unexpected expression".into())),
+                    _ => {
+                        return Err(Error::Internal(
+                            "[KV Engine Scan] Unexpected expression".into(),
+                        ))
+                    }
                 }
-            }else{
+            } else {
                 // filter不存在，查找所有数据
                 rows.push(row);
             }
@@ -170,7 +204,10 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
     fn create_table(&mut self, table: Table) -> Result<()> {
         // 判断表是否存在
         if self.get_table(table.name.clone())?.is_some() {
-            return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" already exists", table.name.clone())))
+            return Err(Error::Internal(format!(
+                "[CreateTable] Failed, Table \" {} \" already exists",
+                table.name.clone()
+            )));
         }
 
         // 判断表是否有效
@@ -184,7 +221,7 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         Ok(())
     }
 
-    fn drop_table(&mut self, name: String)-> Result<()>{
+    fn drop_table(&mut self, name: String) -> Result<()> {
         // 获取表
         let table = self.must_get_table(name.clone())?;
         // 获取表的数据
@@ -200,9 +237,11 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
 
     fn get_table(&self, table_name: String) -> Result<Option<Table>> {
         let key = Key::Table(table_name).encode()?;
-        let value = self.transaction.get(key)?.map(
-            |value| bincode::deserialize(&value)
-        ).transpose()?;
+        let value = self
+            .transaction
+            .get(key)?
+            .map(|value| bincode::deserialize(&value))
+            .transpose()?;
         Ok(value)
     }
 
@@ -217,64 +256,78 @@ impl<E:storageEngine> Transaction for KVTransaction<E> {
         Ok(names)
     }
 
-    fn load_index(&self, table_name: &str, col_name: &str, col_value: &Value) -> Result<HashSet<Value>>{
+    fn load_index(
+        &self,
+        table_name: &str,
+        col_name: &str,
+        col_value: &Value,
+    ) -> Result<HashSet<Value>> {
         // 加载Index_key，并进行反序列化
         let key = Key::Index(table_name.into(), col_name.into(), col_value.clone()).encode()?;
-        Ok(
-            self.transaction.get(key)?
-                .map(|v| bincode::deserialize(&v)).transpose()?.unwrap_or_default()
-        )
+        Ok(self
+            .transaction
+            .get(key)?
+            .map(|v| bincode::deserialize(&v))
+            .transpose()?
+            .unwrap_or_default())
     }
 
-    fn save_index(&mut self, table_name: &str, col_name: &str, col_value: &Value, index: HashSet<Value>) -> Result<()>{
+    fn save_index(
+        &mut self,
+        table_name: &str,
+        col_name: &str,
+        col_value: &Value,
+        index: HashSet<Value>,
+    ) -> Result<()> {
         // 存储索引，如果整个Index_set都空了，那么删除Index
         let key = Key::Index(table_name.into(), col_name.into(), col_value.clone()).encode()?;
-        if index.is_empty(){
+        if index.is_empty() {
             self.transaction.delete(key)
-        }else{
+        } else {
             self.transaction.set(key, bincode::serialize(&index)?)
         }
     }
 
-    fn read_row_by_pk(&self, table_name: &str, pk: &Value) -> Result<Option<Row>>{
-        let res = self.transaction.get(
-            Key::Row(table_name.into(), pk.clone()).encode()?
-        )?.map(|v| bincode::deserialize(&v)).transpose()?;
+    fn read_row_by_pk(&self, table_name: &str, pk: &Value) -> Result<Option<Row>> {
+        let res = self
+            .transaction
+            .get(Key::Row(table_name.into(), pk.clone()).encode()?)?
+            .map(|v| bincode::deserialize(&v))
+            .transpose()?;
         Ok(res)
     }
 }
 
 // 辅助方法：由于底层的存储的传入参数都是 u8, 用户给的字符串需要进行转换
-#[derive(Debug,Serialize,Deserialize)]
-enum Key{
+#[derive(Debug, Serialize, Deserialize)]
+enum Key {
     Table(String),
-    Row(String,Value),   // (table_name, primary_key)
-    Index(String, String, Value),   // [2, table_name, index_col_name, index_col_value]
+    Row(String, Value),           // (table_name, primary_key)
+    Index(String, String, Value), // [2, table_name, index_col_name, index_col_value]
 }
 
-impl Key{
+impl Key {
     pub fn encode(&self) -> Result<Vec<u8>> {
         serialize_key(self)
     }
 }
 
 // 辅助枚举，用于前缀扫描
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum PrefixKey {
-    Table,  // 存的时候Table是第0个枚举，Row是第一个枚举，如果这里没有Table的话，扫描的时候是对不上的，所以要Table进行占位
-    Row(String)
+    Table, // 存的时候Table是第0个枚举，Row是第一个枚举，如果这里没有Table的话，扫描的时候是对不上的，所以要Table进行占位
+    Row(String),
 }
 
-impl PrefixKey{
+impl PrefixKey {
     pub fn encode(&self) -> Result<Vec<u8>> {
         serialize_key(self)
     }
 }
 
-
 // new方法定义
-impl<E:storageEngine> KVEngine<E>{
-    pub fn new(engine:E) -> Self {
+impl<E: storageEngine> KVEngine<E> {
+    pub fn new(engine: E) -> Self {
         Self {
             kv: storage::mvcc::Mvcc::new(engine),
         }

@@ -1,27 +1,40 @@
-use std::fmt::{Display, Formatter};
-use serde::{Deserialize, Serialize};
-use crate::sql::types::{DataType, Row, Value};
 use crate::error::*;
+use crate::sql::types::{DataType, Row, Value};
+use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, PartialEq,Serialize,Deserialize)]
-pub struct Table{
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Table {
     pub name: String,
     pub columns: Vec<Column>,
 }
 
-impl Table{
+impl Table {
     // 判断表的有效性
-    pub fn is_valid(&self) -> Result<()>{
+    pub fn is_valid(&self) -> Result<()> {
         // 判断列是否为空
         if self.columns.is_empty() {
-            return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has no columns", self.name)));
+            return Err(Error::Internal(format!(
+                "[CreateTable] Failed, Table \" {} \" has no columns",
+                self.name
+            )));
         }
 
         // 判断主键信息
         match self.columns.iter().filter(|c| c.is_primary_key).count() {
-            1 => {},
-            0 => return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has no primary key", self.name))),
-            _ => return Err(Error::Internal(format!("[CreateTable] Failed, Table \" {} \" has multiple primary keys", self.name))),
+            1 => {}
+            0 => {
+                return Err(Error::Internal(format!(
+                    "[CreateTable] Failed, Table \" {} \" has no primary key",
+                    self.name
+                )))
+            }
+            _ => {
+                return Err(Error::Internal(format!(
+                    "[CreateTable] Failed, Table \" {} \" has multiple primary keys",
+                    self.name
+                )))
+            }
         }
 
         // 判断列是否有效
@@ -36,10 +49,10 @@ impl Table{
                 match default_value.get_datatype() {
                     Some(datatype) => {
                         if datatype != column.datatype {
-                            return Err(Error::Internal(format!("[CreateTable] Failed, default value type for column \" {} \" mismatch in table \" {} \"", column.name, self.name)))
+                            return Err(Error::Internal(format!("[CreateTable] Failed, default value type for column \" {} \" mismatch in table \" {} \"", column.name, self.name)));
                         }
-                    },
-                    None =>{}
+                    }
+                    None => {}
                 }
             }
         }
@@ -49,28 +62,36 @@ impl Table{
 
     // 获取主键
     pub fn get_primary_key(&self, row: &Row) -> Result<Value> {
-        let index = self.columns.iter().position(|c| c.is_primary_key).unwrap();  // 由于建表时已经判断了主键信息，所以这里直接解包即可
+        let index = self.columns.iter().position(|c| c.is_primary_key).unwrap(); // 由于建表时已经判断了主键信息，所以这里直接解包即可
         Ok(row[index].clone())
     }
 
     // 获取列索引
     pub fn get_col_index(&self, col_name: &str) -> Result<usize> {
-        self.columns.iter().position(|c| c.name == col_name)
-            .ok_or(Error::Internal(format!("[Get Column Index Failed] Column {} not found", col_name)))
+        self.columns
+            .iter()
+            .position(|c| c.name == col_name)
+            .ok_or(Error::Internal(format!(
+                "[Get Column Index Failed] Column {} not found",
+                col_name
+            )))
     }
 }
 
-impl Display for Table{
+impl Display for Table {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let column_description = self.columns.iter()
+        let column_description = self
+            .columns
+            .iter()
             .map(|c| format!("{}", c))
-            .collect::<Vec<_>>().join(",\n");
+            .collect::<Vec<_>>()
+            .join(",\n");
         write!(f, "TABLE NAME: {} (\n{}\n)", self.name, column_description)
     }
 }
 
-#[derive(Debug,PartialEq,Serialize,Deserialize)]
-pub struct Column{
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Column {
     pub name: String,
     pub datatype: DataType,
     pub nullable: bool,
@@ -79,7 +100,7 @@ pub struct Column{
     pub is_index: bool,
 }
 
-impl Display for Column{
+impl Display for Column {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut column_description = format!("  {} {:?} ", self.name, self.datatype);
         if self.is_primary_key {

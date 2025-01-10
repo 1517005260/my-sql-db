@@ -1,11 +1,11 @@
-use std::marker::PhantomData;
 use crate::error::Result;
 use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
+use std::marker::PhantomData;
 
 pub struct TableSchema<T: Transaction> {
     name: String,
-    _marker: PhantomData<T>,  // 通过添加 _marker: PhantomData<T>，我们告诉编译器该结构体实际上与 T 相关联，尽管它不直接使用 T
+    _marker: PhantomData<T>, // 通过添加 _marker: PhantomData<T>，我们告诉编译器该结构体实际上与 T 相关联，尽管它不直接使用 T
 }
 
 impl<T: Transaction> TableSchema<T> {

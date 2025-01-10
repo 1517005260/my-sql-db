@@ -4,34 +4,37 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 
+use crate::Request::SQL;
+use futures::SinkExt;
+use my_sql_db::error::Result;
+use my_sql_db::sql::engine;
 use my_sql_db::sql::engine::kv::KVEngine;
 use my_sql_db::storage::disk::DiskEngine;
-use my_sql_db::sql::engine;
-use my_sql_db::error::Result;
 use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
-use futures::SinkExt;
-use crate::Request::SQL;
 
-const DB_STORAGE_PATH: &str = "./tmp/sqldb-test/log";  // 指定存储文件
-const RESPONSE_END : &str = "!!!THIS IS THE END!!!";   // 结束符，内容可以自定义一个不常见的字符串
+const DB_STORAGE_PATH: &str = "./tmp/sqldb-test/log"; // 指定存储文件
+const RESPONSE_END: &str = "!!!THIS IS THE END!!!"; // 结束符，内容可以自定义一个不常见的字符串
 
-enum Request{
+enum Request {
     // 客户端的请求类型
-    SQL(String),   // SQL命令
+    SQL(String), // SQL命令
 }
 
 pub struct ServerSession<E: engine::Engine> {
     session: engine::Session<E>,
 }
 
-impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进来的，可能生命周期不够长，这里强制为static
-    pub fn new(engine: MutexGuard<'_, E>) -> Result<Self>{
-        Ok(Self{session: engine.session()?})
+impl<E: engine::Engine + 'static> ServerSession<E> {
+    // 由于engine是传进来的，可能生命周期不够长，这里强制为static
+    pub fn new(engine: MutexGuard<'_, E>) -> Result<Self> {
+        Ok(Self {
+            session: engine.session()?,
+        })
     }
 
-    pub async fn handle_request(&mut self, socket: TcpStream) -> Result<()>{
+    pub async fn handle_request(&mut self, socket: TcpStream) -> Result<()> {
         // 循环读取客户端的命令
         let mut lines = Framed::new(socket, LinesCodec::new());
 
@@ -54,7 +57,8 @@ impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进�
                     if let Err(e) = lines.send(res.as_str()).await {
                         println!("error on sending response; error = {e:?}");
                     }
-                    if let Err(e) = lines.send(RESPONSE_END).await {  // 发完结果后发个结束符
+                    if let Err(e) = lines.send(RESPONSE_END).await {
+                        // 发完结果后发个结束符
                         println!("error on sending response end; error = {e:?}");
                     }
                 }
@@ -72,13 +76,13 @@ impl<E: engine::Engine + 'static> ServerSession<E> {  // 由于engine是传进�
 async fn main() -> Result<()> {
     let addr = env::args()
         .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());   // 启动TCP服务，监听8080端口
+        .unwrap_or_else(|| "127.0.0.1:8080".to_string()); // 启动TCP服务，监听8080端口
 
     let listener = TcpListener::bind(&addr).await?;
     println!("SQL DB starts, server is listening on: {addr}");
 
     // 初始化DB
-    let p= PathBuf::from(DB_STORAGE_PATH);
+    let p = PathBuf::from(DB_STORAGE_PATH);
     let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
 
     // 多线程下的读写
@@ -94,7 +98,7 @@ async fn main() -> Result<()> {
 
                 // 开启一个tokio任务
                 tokio::spawn(async move {
-                    match server_session.handle_request(socket).await{
+                    match server_session.handle_request(socket).await {
                         Ok(_) => {}
                         Err(e) => {
                             println!("Internal server error {:?}", e);

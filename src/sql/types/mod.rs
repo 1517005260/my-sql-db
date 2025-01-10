@@ -1,10 +1,10 @@
+use crate::sql::parser::ast::{Consts, Expression};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
-use serde::{Deserialize, Serialize};
-use crate::sql::parser::ast::{Consts, Expression};
 
-#[derive(Debug,PartialEq,Serialize,Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum DataType {
     Boolean,
     Integer,
@@ -12,7 +12,7 @@ pub enum DataType {
     String,
 }
 
-#[derive(Debug,PartialEq,Serialize,Deserialize,Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Value {
     Null,
     Boolean(bool),
@@ -22,7 +22,7 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn from_expression_to_value(expression: Expression) -> Self{
+    pub fn from_expression_to_value(expression: Expression) -> Self {
         match expression {
             Expression::Consts(Consts::Null) => Self::Null,
             Expression::Consts(Consts::Boolean(bool)) => Self::Boolean(bool),
@@ -72,7 +72,7 @@ impl PartialOrd for Value {
             (Value::Float(a), Value::Integer(b)) => a.partial_cmp(&(*b as f64)),
             (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
             (Value::String(a), Value::String(b)) => a.partial_cmp(b),
-            (_, _) => None,  // 其他情况统一认为不可比
+            (_, _) => None, // 其他情况统一认为不可比
         }
     }
 }
@@ -82,7 +82,7 @@ impl Hash for Value {
     // 基础的数据类型其实都已经有hash的系统自带实现，这里我们简单调用即可
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Value::Null => state.write_u8(0),  // 唯一标识防止hash冲突
+            Value::Null => state.write_u8(0), // 唯一标识防止hash冲突
             // 即先写入一个唯一标识，再写入它hash后的值，防止不同类型的值产生相同的哈希值
             Value::Boolean(v) => {
                 state.write_u8(1);
@@ -94,7 +94,7 @@ impl Hash for Value {
             }
             Value::Float(v) => {
                 state.write_u8(3);
-                v.to_be_bytes().hash(state);   // float本身没有实现hash，需要先转为二进制
+                v.to_be_bytes().hash(state); // float本身没有实现hash，需要先转为二进制
             }
             Value::String(v) => {
                 state.write_u8(4);

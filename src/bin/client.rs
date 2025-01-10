@@ -4,9 +4,9 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
-use rustyline::{Editor, Helper, Config, CompletionType, EditMode};
-use rustyline::validate::{Validator, ValidationContext, ValidationResult};
 use rustyline::validate::MatchingBracketValidator;
+use rustyline::validate::{ValidationContext, ValidationResult, Validator};
+use rustyline::{CompletionType, Config, EditMode, Editor, Helper};
 use std::env;
 use std::error::Error;
 use std::net::SocketAddr;
@@ -32,10 +32,9 @@ struct SqlCompleter {
 }
 
 impl SqlCompleter {
-    fn new() -> Self {  // 获取所有关键字
-        let keywords = Keyword::iter()
-            .map(|kw| kw.to_str().to_string())
-            .collect();
+    fn new() -> Self {
+        // 获取所有关键字
+        let keywords = Keyword::iter().map(|kw| kw.to_str().to_string()).collect();
         Self { keywords }
     }
 }
@@ -49,9 +48,13 @@ impl Completer for SqlCompleter {
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        let start = line[..pos].rfind(|c: char| !c.is_alphanumeric() && c != '_').map_or(0, |i| i + 1);
+        let start = line[..pos]
+            .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+            .map_or(0, |i| i + 1);
         let prefix = &line[start..pos].to_uppercase();
-        let candidates: Vec<Pair> = self.keywords.iter()
+        let candidates: Vec<Pair> = self
+            .keywords
+            .iter()
             .filter(|kw| kw.starts_with(prefix))
             .map(|kw| Pair {
                 display: kw.to_string(),
@@ -182,7 +185,10 @@ pub struct Client {
 impl Client {
     pub async fn new(address: SocketAddr) -> Result<Self, Box<dyn Error>> {
         let stream = TcpStream::connect(address).await?;
-        Ok(Self { stream , transaction_version: None })
+        Ok(Self {
+            stream,
+            transaction_version: None,
+        })
     }
 
     pub async fn exec_cmd(&mut self, cmd: &str) -> Result<(), Box<dyn Error>> {
@@ -199,7 +205,7 @@ impl Client {
                 break;
             }
             // 解析事务命令
-            if val.starts_with("TRANSACTION"){
+            if val.starts_with("TRANSACTION") {
                 let args = val.split(" ").collect::<Vec<_>>();
                 if args[2] == "COMMIT" || args[2] == "ROLLBACK" {
                     self.transaction_version = None;
@@ -216,7 +222,7 @@ impl Client {
     }
 }
 
-impl Drop for Client{
+impl Drop for Client {
     fn drop(&mut self) {
         if self.transaction_version.is_some() {
             futures::executor::block_on(self.exec_cmd("ROLLBACK;")).expect("rollback failed");
