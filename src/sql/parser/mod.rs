@@ -166,6 +166,12 @@ impl<'a> Parser<'a> {
                     ast::Consts::Float(n.parse()?).into()
                 }
             },
+            Token::OpenParen => {
+                // 括号里面单独看为一个新表达式计算
+                let expr = self.calculate_expression(1)?;
+                self.expect_next_token_is(Token::CloseParen)?;
+                expr
+            },
             Token::String(s)=> ast::Consts::String(s).into(),
             Token::Keyword(Keyword::True) => ast::Consts::Boolean(true).into(),
             Token::Keyword(Keyword::False) => ast::Consts::Boolean(false).into(),
@@ -182,31 +188,71 @@ impl<'a> Parser<'a> {
         let res = match token{
             Token::Equal => Expression::Operation(Operation::Equal(
                 Box::new(left),
-                Box::new(self.parse_expression()?),
+                Box::new(self.calculate_expression(1)?),
             )),
             Token::Greater => Expression::Operation(Operation::Greater(
                 Box::new(left),
-                Box::new(self.parse_expression()?),
+                Box::new(self.calculate_expression(1)?),
             )),
             Token::GreaterEqual => Expression::Operation(Operation::GreaterEqual(
                 Box::new(left),
-                Box::new(self.parse_expression()?),
+                Box::new(self.calculate_expression(1)?),
             )),
             Token::Less=> Expression::Operation(Operation::Less(
                 Box::new(left),
-                Box::new(self.parse_expression()?),
+                Box::new(self.calculate_expression(1)?),
             )),
             Token::LessEqual=> Expression::Operation(Operation::LessEqual(
                 Box::new(left),
-                Box::new(self.parse_expression()?),
+                Box::new(self.calculate_expression(1)?),
             )),
             Token::NotEqual => Expression::Operation(Operation::NotEqual(
                 Box::new(left),
-                Box::new(self.parse_expression()?),
+                Box::new(self.calculate_expression(1)?),
             )),
             _ => return Err(Error::Internal(format!("[Parser] Unexpected token {}",token))),
         };
         Ok(res)
+    }
+
+    // 计算数学表达式
+    // 这里是不处理括号的，括号在parse_expression()里面处理
+    /** 例如计算 5+2+1：
+        初始 prev_priority=1， left = 5 ，token = + ，是运算符，可以继续处理
+        并且此时 (+.priority = 1) == (prev_priority = 1)，所以不会跳出循环
+        结束时置 next_priority = +.priority + 1 => 2
+
+        递归调用下 prev_priority=2，left=2, token = + ，是运算符，可以继续处理
+        但此时 (+.priority = 1) < (prev_priority = 2)，会跳出循环
+        所以right=2
+
+        接着计算left与right的计算结果即可
+    **/
+    fn calculate_expression(&mut self, prev_priority: i32) -> Result<Expression>{
+        let mut left = self.parse_expression()?;  // 第一个数字
+        loop{
+            // 第一个数字后面的计算符
+            let token = match self.peek()? {
+                Some(t) => t,
+                None => break,   // 第一个数字后面没有计算符了
+            };
+
+            if !token.is_operator()  // 不是运算符，比如右括号，说明计算结束
+                || token.get_priority() < prev_priority  //  前面的优先级是大于left后面的符号优先级的，说明要先计算前面
+            {
+                break;
+            }
+
+            let next_priority = token.get_priority() + 1;  // 爬升法
+            self.next()?; // 跳到下个token
+
+            // 递归计算右边的表达式
+            let right = self.calculate_expression(next_priority)?;
+
+            // 计算左右两边的计算结果
+            left = token.calculate_expr(left, right)?;
+        }
+        Ok(left)
     }
 
     // 分类二：Select语句

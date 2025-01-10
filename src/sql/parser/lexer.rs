@@ -4,6 +4,7 @@ use std::str::Chars;
 use strum_macros::EnumIter;
 use crate::error::{Error, Result}; //自定义result
 use crate::error::Error::Parse;
+use crate::sql::parser::ast::{Consts, Expression};
 
 // 对token和Keyword的定义
 // 派生注解解释：Debug允许你用{:?}打印调试信息，Clone允许用.clone()创建复制体，PartialEq允许对两个结构体的所有属性进行比较
@@ -27,6 +28,61 @@ pub enum Token {
     Less,               // <
     LessEqual,          // <=
     NotEqual,           // !=
+    Hat,                // ^
+}
+
+impl Token {
+    // 判断是否是数学运算符
+    pub fn is_operator(&self) -> bool {
+        match self {
+            Token::Plus | Token::Minus | Token::Asterisk | Token::Slash | Token::Hat => true,
+            _ => false,
+        }
+    }
+
+    // 获取优先级
+    pub fn get_priority(&self) -> i32{
+        match self {
+            Token::Plus | Token::Minus => 1,
+            Token::Asterisk | Token::Slash => 2,
+            Token::Hat => 3,
+            _ => 0,
+        }
+    }
+
+    pub fn calculate_expr(&self, left : Expression, right: Expression) -> Result<Expression> {
+        let val = match (left, right){
+            (Expression::Consts(c1), Expression::Consts(c2)) => match (c1, c2) {  // 只能计算常数的计算
+                (Consts::Integer(l), Consts::Integer(r)) => {
+                    self.calculate(l as f64, r as f64)?
+                }
+                (Consts::Integer(l), Consts::Float(r)) => {
+                    self.calculate(l as f64, r)?
+                }
+                (Consts::Float(l), Consts::Integer(r)) => {
+                    self.calculate(l, r as f64)?
+                }
+                (Consts::Float(l), Consts::Float(r)) => {
+                    self.calculate(l, r)?
+                }
+                _ => return Err(Parse("[Lexer] Cannot calculate the expression".into())),
+            },
+            _ => return Err(Parse("[Lexer] Cannot calculate the expression".into())),
+        };
+
+        Ok(Expression::Consts(Consts::Float(val)))
+    }
+
+    fn calculate(&self, left: f64, right: f64) -> Result<f64> {
+        Ok(match self {
+            Token::Asterisk => left * right,
+            Token::Plus => left + right,
+            Token::Minus => left - right,
+            Token::Slash => left / right,
+            Token::Hat => left.powf(right),  // powf无论如何都返回浮点数
+            _ => return Err(Parse("[Lexer] Cannot calculate the expression".into())),
+        })
+    }
 }
 
 impl Display for Token {
@@ -50,6 +106,7 @@ impl Display for Token {
             Token::Less => "<",
             Token::LessEqual => "<=",
             Token::NotEqual => "!=",
+            Token::Hat => "^",
         })
     }
 }
@@ -374,6 +431,7 @@ impl<'a> Lexer<'a> {
                 '-' => Some(Token::Minus),
                 '/' => Some(Token::Slash),
                 '=' => Some(Token::Equal),
+                '^' => Some(Token::Hat),
                 _ => None,
             })
         }

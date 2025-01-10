@@ -86,7 +86,14 @@ impl<T:Transaction> Executor<T> for PkIndex{
     fn execute(self:Box<Self>,trasaction: &mut T) -> Result<ResultSet> {
         let table = trasaction.must_get_table(self.table_name.clone())?;
         let mut rows = Vec::new();
-        if let Some(row) = trasaction.read_row_by_pk(&self.table_name, &self.value)?{
+        let mut pk_value = self.value.clone();
+        if let Value::Float(f) = self.value{
+            // 我们查看小数部分是否为0，如果为0说明是整数，需要进行转换
+            if f.fract() == 0.0{
+                pk_value = Value::Integer(f as i64);
+            }
+        }
+        if let Some(row) = trasaction.read_row_by_pk(&self.table_name, &pk_value)?{
             rows.push(row);
         }
 
