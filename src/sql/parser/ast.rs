@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use crate::error::Error::Internal;
 use crate::sql::types::{DataType, Value};
 // 本模块是抽象语法树的定义
@@ -83,6 +84,24 @@ impl From<Consts> for Expression{
     }
 }
 
+impl Display for Expression{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expression::Consts(c) => write!(f, "{}", Value::from_expression_to_value(Expression::Consts(c.clone()))),
+            Expression::Field(col_name) => write!(f, "{}", col_name),
+            Expression::Operation(op) => match op {
+                Operation::Equal(l, r) => write!(f, "{} = {}", l, r),
+                Operation::Greater(l, r) => write!(f, "{} > {}", l, r),
+                Operation::GreaterEqual(l, r) => write!(f, "{} >= {}", l, r),
+                Operation::Less(l, r) => write!(f, "{} < {}", l, r),
+                Operation::LessEqual(l, r) => write!(f, "{} <= {}", l, r),
+                Operation::NotEqual(l, r) => write!(f, "{} != {}", l, r),
+            },
+            Expression::Function(func_name, col_name) => write!(f, "{}({})", func_name, col_name),
+        }
+    }
+}
+
 // sql 语句的定义
 #[derive(Debug,PartialEq)]
 pub enum Sentence{
@@ -129,6 +148,9 @@ pub enum Sentence{
     Commit{
     },
     Rollback{
+    },
+    Explain{
+        sentence: Box<Sentence>,
     },
 }
 

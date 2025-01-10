@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::iter::Peekable;
 use crate::sql::parser::lexer::{Keyword, Lexer, Token};
 use crate::error::{Result, Error};
+use crate::error::Error::Parse;
 use crate::sql::parser::ast::{Column, Expression, FromItem, JoinType, Operation, OrderBy, Sentence};
 use crate::sql::parser::ast::FromItem::{Join, Table};
 use crate::sql::parser::ast::JoinType::{Cross, Inner, Left, Right};
@@ -52,6 +53,7 @@ impl<'a> Parser<'a> {
             Some(Token::Keyword(Keyword::Begin)) => self.parse_transaction(),
             Some(Token::Keyword(Keyword::Commit)) => self.parse_transaction(),
             Some(Token::Keyword(Keyword::Rollback)) => self.parse_transaction(),
+            Some(Token::Keyword(Keyword::Explain)) => self.parse_explain(),
             Some(token) => Err(Error::Parse(format!("[Parser] Unexpected token {}",token))),  // 其他token
             None => Err(Error::Parse("[Parser] Unexpected EOF".to_string()))
         }
@@ -340,6 +342,18 @@ impl<'a> Parser<'a> {
             _ => return Err(Error::Internal("[Parser] Unknown transaction command".to_string()))
         };
         Ok(sentence)
+    }
+
+    fn parse_explain(&mut self) -> Result<Sentence>{
+        self.expect_next_token_is(Token::Keyword(Keyword::Explain))?;
+        // 不支持对Explain语句进行Explain
+        if let Some(Token::Keyword(Keyword::Explain)) = self.peek()? {
+            return Err(Parse("[Parser] Cannot explain the explain sql".to_string()));
+        }
+        // 拿到explain后面的sql语句
+        Ok(Sentence::Explain{
+            sentence: Box::new(self.parse_sentence()?)
+        })
     }
 
     fn parse_select_condition(&mut self) -> Result<Vec<(Expression, Option<String>)>>{

@@ -154,6 +154,9 @@ impl<'a, T:Transaction> Planner<'a, T> {
             Sentence::Begin{} | Sentence::Commit{} | Sentence::Rollback{} => {
                 return Err(Error::Internal("[Planner] Unexpected transaction command".into()));
             },
+            Sentence::Explain {sentence:_} => {  // 不使用字段sentence
+                return Err(Error::Internal("[Planner] Unexpected explain command".into()));
+            },
         })
         }
 

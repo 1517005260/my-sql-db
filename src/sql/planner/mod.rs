@@ -1,11 +1,13 @@
-use std::collections::BTreeMap;
-use crate::sql::engine::Transaction;
 use crate::error::Result;
+use crate::sql::engine::Transaction;
 use crate::sql::executor::{Executor, ResultSet};
+use crate::sql::parser::ast::OrderBy::Asc;
 use crate::sql::parser::ast::{Expression, OrderBy, Sentence};
 use crate::sql::planner::planner::Planner;
 use crate::sql::schema::Table;
 use crate::sql::types::Value;
+use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 
 mod planner;
 
@@ -91,6 +93,127 @@ pub enum Node{
     },
 }
 
+// Plan Node 的格式化输出方法
+impl Display for Node{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.format(f, "", true)
+    }
+}
+
+impl Node{
+    fn format(&self, f: &mut Formatter<'_>,  // formatter进行输出
+              prefix: &str,                  // 换行前缀
+              is_first: bool,                // 是否是第一个节点
+    ) -> std::fmt::Result {
+        if is_first{
+            writeln!(f, "           SQL PLAN           ")?;
+            writeln!(f, "------------------------------")?;
+        }else {
+            writeln!(f)?;
+        }
+
+        let prefix =
+            if prefix.is_empty() {
+            " -> ".to_string()
+        } else {
+            write!(f, "{}", prefix)?;
+            format!(" {}", prefix)  // 下一个prefix需要有层次感
+        };
+
+        match self {
+            Node::CreateTable {schema} => {
+                write!(f, "Create Table {}", schema.name)
+            },
+            Node::DropTable {name} => {
+                write!(f, "Drop Table {}", name)
+            },
+            Node::Insert {table_name, columns:_, values:_} => {
+                write!(f, "Insert Into Table {}", table_name)
+            },
+            Node::Scan {table_name, filter} => {
+                write!(f, "Sequence Scan On Table {}", table_name)?;
+                if let Some(filter) = filter {
+                    write!(f, " ( Filter: {} )", filter)?;
+                }
+                Ok(())
+            },
+            Node::ScanIndex { table_name, col_name, value:_ } => {
+                write!(f, "Index Scan On Table {}.{}", table_name, col_name)
+            },
+            Node::PkIndex { table_name, value } => {
+                write!(f, "Primary Key Scan On Table {}({})", table_name, value)
+            },
+            Node::Update {table_name, scan, columns:_} => {
+                write!(f, "Update On Table {}", table_name)?;
+                (*scan).format(f, &prefix, false)
+            },
+            Node::Delete {table_name, scan} => {
+                write!(f, "Delete On Table {}", table_name)?;
+                (*scan).format(f, &prefix, false)
+            },
+            Node::OrderBy {scan, order_by} => {
+                let condition = order_by.iter().
+                    map(|c| {
+                        format!("{} {}", c.0, if c.1 == Asc {"Asc"} else {"Desc"})
+                    }).collect::<Vec<_>>().join(", ");
+                write!(f, "Order By {}", condition)?;
+                (*scan).format(f, &prefix, false)
+            },
+            Node::Limit {source, limit} => {
+                write!(f, "Limit {}", limit)?;
+                (*source).format(f, &prefix, false)
+            }
+            Node::Offset {source, offset} => {
+                write!(f, "Offset {}", offset)?;
+                (*source).format(f, &prefix, false)
+            }
+            Node::Projection {source, expressions} => {
+                let selects = expressions.iter().map(|(col_name, nick_name)|{
+                    format!("{} {}", col_name, if nick_name.is_some() {format!(" As {}", nick_name.clone().unwrap())} else {"".to_string()})
+                }).collect::<Vec<_>>().join(", ");
+                write!(f, "Projection {}", selects)?;
+                (*source).format(f, &prefix, false)
+            },
+            Node::NestedLoopJoin {left, right, condition, outer:_} => {
+                write!(f, "Nested Loop Join")?;
+                if let Some(expr) = condition {
+                    write!(f, "( {} )", expr)?;
+                }
+                (*left).format(f, &prefix, false)?;
+                (*right).format(f, &prefix, false)
+            },
+            Node::HashJoin {left, right, condition, outer:_} => {
+                write!(f, "Hash Join")?;
+                if let Some(expr) = condition {
+                    write!(f, "( {} )", expr)?;
+                }
+                (*left).format(f, &prefix, false)?;
+                (*right).format(f, &prefix, false)
+            },
+            Node::Aggregate { source, expression, group_by} => {
+                let agg = expression.iter().map(|(col_name, nick_name)|{
+                    format!("{} {}", col_name, if nick_name.is_some() {format!(" As {}", nick_name.clone().unwrap())} else {"".to_string()})
+                }).collect::<Vec<_>>().join(", ");
+                write!(f, "Aggregate {} ", agg)?;
+                if let Some(Expression::Field(col_name)) = group_by {
+                    write!(f, "Group By {}", col_name)?;
+                }
+                (*source).format(f, &prefix, false)
+            },
+            Node::Having { source, condition} => {
+                write!(f, "Filter: {}", condition)?;
+                (*source).format(f, &prefix, false)
+            },
+            Node::TableSchema { name } => {
+                write!(f, "Show Table Schema: {}", name)
+            },
+            Node::TableNames {} => {
+                write!(f, "Show Table Names")
+            },
+        }
+    }
+}
+
 // 定义执行计划，执行计划的底层是不同执行节点
 // 多个Node节点组成了执行计划Plan树
 #[derive(Debug,PartialEq)]
@@ -110,6 +233,9 @@ impl Plan{
 
 #[cfg(test)]
 mod tests {
+    use crate::sql::engine::kv::KVEngine;
+    use crate::sql::engine::Engine;
+    use crate::storage::disk::DiskEngine;
     use crate::{
         error::Result,
         sql::{
@@ -120,9 +246,6 @@ mod tests {
             planner::{Node, Plan},
         },
     };
-    use crate::sql::engine::Engine;
-    use crate::sql::engine::kv::KVEngine;
-    use crate::storage::disk::DiskEngine;
 
     #[test]
     fn test_plan_create_table() -> Result<()> {

@@ -103,6 +103,23 @@ impl<E:Engine + 'static> Session<E> {
                 transaction.rollback()?;
                 Ok(ResultSet::Rollback { version })
             },
+            ast::Sentence::Explain {sentence} => {
+                let plan = match self.transaction.as_ref() {
+                    Some(_) => {
+                        // 如果处在事务中
+                        // 直接构建Plan节点返回即可
+                        Plan::build(*sentence, self.transaction.as_mut().unwrap())?
+                    },
+                    None => {
+                        // 手动构建事务
+                        let mut transaction = self.engine.begin()?;
+                        let plan = Plan::build(*sentence, &mut transaction)?;
+                        transaction.commit()?;
+                        plan
+                    }
+                };
+                Ok(ResultSet::Explain { plan: plan.0.to_string()})  // to_string 实际上就是 node 的Display方法
+            },
             sentence if self.transaction.is_some() =>{
                 // 在事务内的sql
                 Plan::build(sentence, self.transaction.as_mut().unwrap())?.execute(self.transaction.as_mut().unwrap())
