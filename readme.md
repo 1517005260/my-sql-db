@@ -352,7 +352,7 @@ a |b    |c
 
 基于每次启动客户端的sql历史数据推荐下一条最可能的sql。
 
-现在删除存储文件（`$PROJECT$/tmp/sqldb-test/log`），重新开始：
+现在Flush DB，重新开始：
 
 ```bash
 sql-db>> create table t (a int primary key, b text, c float);

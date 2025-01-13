@@ -442,3 +442,48 @@ max
 [Execution time: 604.034µs]
 sql-db>>
 ```
+
+## 补丁
+
+由于标准sql语法中，还有describe table_name的语法，这个和show table table_name一样，这里做下兼容：
+
+在parser/lexer.rs中新增关键字：
+
+```rust
+#[derive(Debug, Clone, PartialEq, EnumIter)]
+pub enum Keyword {
+    Describe,
+}
+
+impl Keyword {
+    pub fn transfer(input: &str) -> Option<Self> {
+        Some(match input.to_uppercase().as_ref() {
+            "DESCRIBE" => Keyword::Describe,
+        })
+    }
+}
+
+impl Keyword {
+    pub fn to_str(&self) -> &str {
+        match self {
+            Keyword::Describe => "DESCRIBE",
+        }
+    }
+}
+```
+
+在parser/mod.rs中修改
+
+```rust
+fn parse_sentence(&mut self) -> Result<Sentence> {
+    match self.peek()? {
+        Some(Token::Keyword(Keyword::Describe)) => self.parse_describe(),        
+    }
+}
+
+fn parse_describe(&mut self) -> Result<Sentence> {
+    self.expect_next_token_is(Token::Keyword(Keyword::Describe))?;
+    let table_name = self.expect_next_is_ident()?;
+    Ok(TableSchema {table_name})
+}
+```

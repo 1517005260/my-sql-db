@@ -155,6 +155,8 @@ pub enum Keyword {
     Index,
     Drop,
     Explain,
+    Describe,
+    Flush,
 }
 
 // word -> Keyword
@@ -211,6 +213,8 @@ impl Keyword {
             "INDEX" => Keyword::Index,
             "DROP" => Keyword::Drop,
             "EXPLAIN" => Keyword::Explain,
+            "DESCRIBE" => Keyword::Describe,
+            "FLUSH" => Keyword::Flush,
             _ => return None,
         })
     }
@@ -268,6 +272,8 @@ impl Keyword {
             Keyword::Index => "INDEX",
             Keyword::Drop => "DROP",
             Keyword::Explain => "EXPLAIN",
+            Keyword::Describe => "DESCRIBE",
+            Keyword::Flush => "FLUSH",
         }
     }
 }

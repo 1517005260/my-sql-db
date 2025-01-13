@@ -139,6 +139,29 @@ impl<E: Engine + 'static> Session<E> {
                     plan: plan.0.to_string(),
                 }) // to_string 实际上就是 node 的Display方法
             }
+            ast::Sentence::Flush {} => {
+                let res = match self.transaction.as_ref() {
+                    Some(_) => {
+                        let transaction = self.transaction.as_mut().unwrap();
+                        let names = transaction.get_all_table_names()?;
+                        for name in names {
+                            transaction.drop_table(name)?;
+                        }
+                        ResultSet::Flush {}
+                    }
+                    None => {
+                        // 手动构建事务
+                        let mut transaction = self.engine.begin()?;
+                        let names = transaction.get_all_table_names()?;
+                        for name in names {
+                            transaction.drop_table(name)?;
+                        }
+                        transaction.commit()?;
+                        ResultSet::Flush {}
+                    }
+                };
+                Ok(res)
+            }
             sentence if self.transaction.is_some() => {
                 // 在事务内的sql
                 Plan::build(sentence, self.transaction.as_mut().unwrap())?

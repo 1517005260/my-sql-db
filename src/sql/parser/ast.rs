@@ -154,6 +154,7 @@ pub enum Sentence {
     Explain {
         sentence: Box<Sentence>,
     },
+    Flush {},
 }
 
 // 解析表达式

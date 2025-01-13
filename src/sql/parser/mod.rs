@@ -52,10 +52,12 @@ impl<'a> Parser<'a> {
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
             Some(Token::Keyword(Keyword::Delete)) => self.parse_delete(),
             Some(Token::Keyword(Keyword::Show)) => self.parse_show(),
+            Some(Token::Keyword(Keyword::Describe)) => self.parse_describe(),
             Some(Token::Keyword(Keyword::Begin)) => self.parse_transaction(),
             Some(Token::Keyword(Keyword::Commit)) => self.parse_transaction(),
             Some(Token::Keyword(Keyword::Rollback)) => self.parse_transaction(),
             Some(Token::Keyword(Keyword::Explain)) => self.parse_explain(),
+            Some(Token::Keyword(Keyword::Flush)) => self.parse_flush(),
             Some(token) => Err(Error::Parse(format!("[Parser] Unexpected token {}", token))), // 其他token
             None => Err(Error::Parse("[Parser] Unexpected EOF".to_string())),
         }
@@ -420,6 +422,12 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_describe(&mut self) -> Result<Sentence> {
+        self.expect_next_token_is(Token::Keyword(Keyword::Describe))?;
+        let table_name = self.expect_next_is_ident()?;
+        Ok(TableSchema { table_name })
+    }
+
     // 分类：事务命令
     fn parse_transaction(&mut self) -> Result<Sentence> {
         let sentence = match self.next()? {
@@ -616,6 +624,11 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(order_by_condition)
+    }
+
+    fn parse_flush(&mut self) -> Result<Sentence> {
+        self.expect_next_token_is(Token::Keyword(Keyword::Flush))?;
+        Ok(Sentence::Flush {})
     }
 
     // 一些小工具

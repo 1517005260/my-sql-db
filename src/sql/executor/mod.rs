@@ -63,6 +63,7 @@ pub enum ResultSet {
     Explain {
         plan: String,
     },
+    Flush {},
 }
 
 impl ResultSet {
@@ -136,6 +137,7 @@ impl ResultSet {
             ResultSet::Commit { version } => format!("TRANSACTION {} COMMIT", version),
             ResultSet::Rollback { version } => format!("TRANSACTION {} ROLLBACK", version),
             ResultSet::Explain { plan } => plan.to_string(),
+            ResultSet::Flush {} => "FLUSH DB".to_string(),
         }
     }
 }

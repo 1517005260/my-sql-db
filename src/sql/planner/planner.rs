@@ -182,6 +182,9 @@ impl<'a, T: Transaction> Planner<'a, T> {
                     "[Planner] Unexpected explain command".into(),
                 ));
             }
+            Sentence::Flush {} => {
+                return Err(Error::Internal("[Planner] Unexpected flush command".into()))
+            }
         })
     }
 

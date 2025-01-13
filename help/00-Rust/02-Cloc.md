@@ -4,19 +4,19 @@
 
 ```bash
 (base) glk@ggg:~/project/my-sql-db$ cloc .
-      95 text files.
-      95 unique files.                              
-       7 files ignored.
+      97 text files.
+      97 unique files.
+       8 files ignored.
 
-github.com/AlDanial/cloc v 1.90  T=0.08 s (1054.2 files/s, 298635.4 lines/s)
+github.com/AlDanial/cloc v 1.90  T=0.08 s (1146.1 files/s, 325827.1 lines/s)
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Markdown                        55           2778              0          14113
-Rust                            29            828            531           6789
-XML                              4              0              0            144
+Markdown                        57           2850              0          14637
+Rust                            29            830            532           6834
+XML                              4              0              0            159
 TOML                             1              2              0             27
 -------------------------------------------------------------------------------
-SUM:                            89           3608            531          21073
+SUM:                            91           3682            532          21657
 -------------------------------------------------------------------------------
 ```
